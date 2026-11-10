@@ -1,0 +1,65 @@
+CAIXA DE AREIA - COMO USAR
+==========================
+
+Ao ligar o computador, o projetor mostra a TOPOGRAFIA (o relevo colorido da areia).
+Para projetar uma FOTO na areia, use os comandos abaixo no Terminal (Ctrl+Alt+T).
+
+
+1. COLOCAR AS IMAGENS
+---------------------
+Copie as fotos para esta pasta (Área de Trabalho > Areia).
+Formatos: .jpg, .png, .webp, .bmp   (foto HEIC do iPhone: converta para .jpg antes)
+
+- Foto com rosto: recorta em volta da pessoa e tira o fundo.
+- Imagem sem rosto (paisagem, desenho, logo): aparece inteira, com o fundo.
+- PNG que já vem sem fundo: aparece como está.
+
+
+2. PROJETAR UMA FOTO
+--------------------
+  areia-foto
+      Mostra a lista numerada das imagens desta pasta e pergunta qual projetar.
+      Digite o número e Enter. (Só Enter = a última usada.)
+
+  areia-foto 2
+      Projeta direto a imagem número 2 da lista.
+
+  areia-foto victor
+      Projeta a imagem cujo nome contém "victor".
+
+  areia-foto ~/Downloads/foto.jpg
+      Usa um arquivo de outro lugar (ele é copiado para esta pasta).
+
+A primeira vez que uma imagem é usada leva uns 5 segundos; depois, cerca de 1 segundo.
+
+
+3. AJUSTAR
+----------
+  areia-foto girar       gira a imagem 90 graus (repita até ficar de pé para quem olha a caixa)
+  areia-foto espelhar    espelha a imagem (se o texto aparecer invertido)
+  areia-foto lista       só mostra a lista de imagens
+  areia-foto pasta       abre esta pasta
+  areia-foto ajuda       mostra todos os comandos
+
+  Opções depois da imagem:
+  areia-foto 2 --com-fundo    não tira o fundo
+  areia-foto 2 --sem-fundo    tira o fundo mesmo sem rosto na imagem
+
+
+4. VOLTAR PARA A TOPOGRAFIA
+---------------------------
+  areia-topografia
+
+
+PELO CELULAR (opcional)
+-----------------------
+Com o Tailscale ligado no celular, abra:  http://100.114.194.28:8090
+Dá para tirar uma selfie, escolher a imagem, trocar de modo e ajustar a deformação.
+As fotos enviadas pelo celular também vêm para esta pasta.
+
+
+SE ALGO DER ERRADO
+------------------
+- A imagem não apareceu: rode  areia-topografia  e depois  areia-foto  de novo.
+- O projetor ficou sem imagem: reinicie o computador; ele volta na topografia.
+- Os arquivos do programa ficam em ~/SARndbox-rosto (não apague essa pasta).

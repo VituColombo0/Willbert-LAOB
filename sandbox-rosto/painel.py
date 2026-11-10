@@ -14,7 +14,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 FOTOS = os.path.join(AQUI, "fotos")
 ESTADO = os.path.join(AQUI, "estado.json")
 PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "python")
-AREIA = os.path.expanduser("~/Pictures/Areia")  # a mesma pasta do comando areia-foto
+AREIA = os.path.expanduser("~/Desktop/Areia")  # a mesma pasta do comando areia-foto (Área de Trabalho)
 SANDBOX = os.path.join(AQUI, "sandbox.sh")
 PADRAO = {"modo": "relevo", "giro": 0, "espelho": False,
           "ajuste": {"zoom": 0.03, "desloc": 0.0, "mistura": 0.0, "sombra": 1.0}}

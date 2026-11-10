@@ -1,5 +1,5 @@
 #!/home/laob/SARndbox-rosto/venv/bin/python
-"""Modo FOTO da caixa de areia: projeta uma imagem da pasta Areia que se deforma com a areia.
+"""Modo FOTO da caixa de areia: projeta uma imagem da pasta Areia (na Área de Trabalho).
 
   areia-foto                 escolhe a imagem num menu (Enter = a última usada)
   areia-foto 3               a imagem número 3 da lista
@@ -32,11 +32,12 @@ AJUSTE = {"zoom": 0.03, "desloc": 0.0, "mistura": 0.0, "sombra": 1.0}
 
 
 def pasta():
+    """A pasta Areia fica na Área de Trabalho."""
     try:
-        img = subprocess.run(["xdg-user-dir", "PICTURES"], capture_output=True, text=True).stdout.strip()
+        mesa = subprocess.run(["xdg-user-dir", "DESKTOP"], capture_output=True, text=True).stdout.strip()
     except OSError:
-        img = ""
-    p = os.path.join(img if img and img != os.path.expanduser("~") else os.path.expanduser("~/Pictures"), "Areia")
+        mesa = ""
+    p = os.path.join(mesa if mesa and mesa != os.path.expanduser("~") else os.path.expanduser("~/Desktop"), "Areia")
     os.makedirs(p, exist_ok=True)
     return p
 

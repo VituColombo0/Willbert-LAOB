@@ -50,7 +50,8 @@ girar/espelhar e ajustar deformação, sombra e mistura com as cores de relevo.
 - Ao ligar o lab2, o autostart (`~/.config/autostart/SARndbox.desktop`) roda `areia-topografia`:
   o SARndbox original em tela cheia no projetor. O atalho antigo ficou em
   `~/SARndbox-rosto/SARndbox.desktop.original` (para desfazer, copie-o de volta).
-- **Pasta das imagens:** `~/Pictures/Areia` (atalho "Areia" na barra lateral do Arquivos). Coloque
+- **Pasta das imagens:** `~/Desktop/Areia`, na Área de Trabalho, com o arquivo `COMO USAR.txt` (cópia de
+  `COMO-USAR.txt` deste diretório) e atalho "Areia" na barra lateral do Arquivos. Coloque
   ali as fotos (.jpg, .png, .webp, .bmp). No terminal (comandos em `~/.local/bin`):
   - `areia-foto`: lista as imagens da pasta e pergunta o número (Enter = a última usada).
   - `areia-foto 3` / `areia-foto gato`: escolhe direto pelo número ou por parte do nome.
