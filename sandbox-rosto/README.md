@@ -22,6 +22,13 @@ Cópia do AR Sandbox 2.8 (`~/SARndbox-rosto` no lab2) com dois modos novos. O or
     python3 patch_surface.py && python3 patch_sandbox.py
     make INSTALLDIR=$HOME/SARndbox-rosto
 
+## Painel do celular
+`painel.py` (serviço de usuário `sandbox-painel`) em http://100.114.194.28:8090 (só Tailscale e
+127.0.0.1): tirar selfie, escolher foto ou usar a câmera do laboratório, trocar de modo,
+girar/espelhar e ajustar deformação, sombra e mistura com as cores de relevo.
+
+    cp sandbox-painel.service ~/.config/systemd/user/ && systemctl --user enable --now sandbox-painel
+
 ## Usar
     ./sandbox.sh rosto
     /opt/visao/venv/bin/python rosto.py foto.jpg
