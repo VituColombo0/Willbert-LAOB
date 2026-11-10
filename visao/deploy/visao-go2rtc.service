@@ -1,0 +1,16 @@
+[Unit]
+Description=Visão - go2rtc (áudio para o alto-falante da câmera; API só em 127.0.0.1:1984)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=visao
+Group=visao
+ExecStart=/opt/visao/bin/go2rtc -config /opt/visao/go2rtc.yaml
+Restart=always
+RestartSec=5
+MemoryMax=120M
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,6 @@
+#!/bin/sh
+# Atalho para a linha de comando do Visão (instalado em /usr/local/bin/visao-cli).
+export VISAO_CONFIG=/opt/visao/config.toml
+export PYTHONPATH=/opt/visao/app
+export OPENCV_LOG_LEVEL=ERROR
+exec /opt/visao/venv/bin/python -m visao.cli "$@"

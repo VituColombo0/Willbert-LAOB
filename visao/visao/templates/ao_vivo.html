@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block title %}Ao vivo{% endblock %}
+{% block body %}
+<div class="head-row"><h1>Ao vivo</h1></div>
+<div id="warn" class="flash warn" {% if not warn %}hidden{% endif %}>{{ warn or '' }}</div>
+<div class="live">
+  <div class="card live-img">
+    <img id="cam" src="{{ url_for('live_jpg') }}" alt="Imagem da câmera">
+    <p class="muted small">Atualiza a cada 2 s quando há movimento; parada, a cada ~10 s.
+      Verde = membro identificado · amarelo = tentando identificar · vermelho = desconhecido.</p>
+  </div>
+  <div class="card">
+    <h2>Agora</h2>
+    <dl class="kv">
+      <dt>Modo</dt><dd id="mode">—</dd>
+      <dt>Rostos no quadro</dt><dd id="faces">—</dd>
+      <dt>Identificados (últimos 30 min)</dt><dd id="present">—</dd>
+      <dt>Captura de amostras</dt><dd id="capture">—</dd>
+    </dl>
+    <h2>Sistema</h2>
+    <dl class="kv">
+      <dt>Câmera</dt><dd id="camera">—</dd>
+      <dt>Eventos ONVIF</dt><dd id="onvif">—</dd>
+      <dt>Gravação de clipes</dt><dd id="rec">—</dd>
+      <dt>Cumprimento falado</dt><dd id="speaker">—</dd>
+      <dt>Tempo por ciclo</dt><dd id="cycle">—</dd>
+      <dt>Galeria</dt><dd id="gallery">—</dd>
+      <dt>Temperatura / carga</dt><dd id="temp">—</dd>
+      <dt>Disco livre</dt><dd>{{ '%.1f'|format(disk_free) }} de {{ '%.1f'|format(disk_total) }} GB</dd>
+    </dl>
+  </div>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const hm = ts => new Date(ts * 1000).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'});
+async function tick() {
+  try {
+    const r = await fetch('{{ url_for('api_status') }}', {cache: 'no-store'});
+    if (r.redirected) { location.reload(); return; }
+    const {status: s, warn} = await r.json();
+    $('warn').hidden = !warn; $('warn').textContent = warn || '';
+    if (s) {
+      $('mode').textContent = s.mode + (s.motion ? ' · movimento' : '') + (s.ptz_moving ? ' · câmera girando' : '');
+      $('faces').textContent = s.faces + (s.tracks.length ? ' — ' + s.tracks.map(t => t.name || (t.attempts ? 'identificando…' : 'detectado')).join(', ') : '');
+      $('present').textContent = s.present.length ? s.present.map(p => `${p.name} (desde ${hm(p.since)})`).join(', ') : 'ninguém';
+      $('capture').textContent = s.capture ? `${s.capture.captured} de ${s.capture.target}` : 'nenhuma';
+      $('camera').textContent = s.camera_online ? `online · ${s.stream_size ? s.stream_size.join('×') : ''} · ${s.decoder_fps} qps` : 'offline';
+      $('onvif').textContent = `${s.onvif} · ${s.onvif_events} recebidos`;
+      $('rec').textContent = s.recorder_online ? 'ativa' : 'parada';
+      const sp = s.speaker || {};
+      $('speaker').textContent = sp.enabled ? (sp.last_error ? 'erro: ' + sp.last_error : `ok · voz ${sp.engine === 'piper' ? 'natural' : 'robótica'} · ${sp.spoken} falas${sp.last_route ? ' · última pela ' + sp.last_route : ''}${sp.pending ? ' · gerando ' + sp.pending + ' frases' : ''}`) : (sp.last_error || 'desligado');
+      $('cycle').textContent = s.cycle_ms ? (s.cycle_ms / 1000).toFixed(1) + ' s' : '—';
+      $('gallery').textContent = `${s.gallery_members} membros · ${s.gallery_samples} amostras`;
+      $('temp').textContent = `${s.cpu_temp ?? '—'} °C · ${s.load}`;
+    }
+    $('cam').src = '{{ url_for('live_jpg') }}?t=' + Date.now();
+  } catch (e) {}
+}
+tick(); setInterval(tick, 2000);
+</script>
+{% endblock %}

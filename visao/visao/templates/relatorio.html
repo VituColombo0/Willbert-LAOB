@@ -1,0 +1,70 @@
+{% extends 'base.html' %}
+{% block title %}Relatório{% endblock %}
+{% block body %}
+<div class="head-row">
+  <h1>Relatório</h1>
+  <form class="inline" method="get">
+    <label class="inline-label">De <input type="date" name="inicio" value="{{ d0.isoformat() }}"></label>
+    <label class="inline-label">até <input type="date" name="fim" value="{{ d1.isoformat() }}"></label>
+    <button class="btn">Ver</button>
+    <a class="btn ghost" href="{{ url_for('relatorio_csv', inicio=d0.isoformat(), fim=d1.isoformat()) }}">Baixar CSV</a>
+  </form>
+</div>
+
+<section class="card">
+  <h2>Por membro <small class="muted">{{ d0.strftime('%d/%m') }} a {{ d1.strftime('%d/%m/%Y') }}</small></h2>
+  <p class="muted small">O histórico é guardado por {{ retention_days }} dias; registros mais antigos são apagados automaticamente.</p>
+  <div class="scroll"><table>
+    <thead><tr><th>Membro</th><th>Dias em que foi visto</th><th>Identificações</th><th>Última vez visto</th></tr></thead>
+    <tbody>
+    {% for p in resumo %}
+      <tr class="{{ 'dim' if not p.entries }}">
+        <td>{% if p.member_id %}<a href="{{ url_for('membros_detalhe', mid=p.member_id) }}">{{ p.name }}</a>{% else %}{{ p.name }}{% endif %}</td>
+        <td>{{ p.n_days }}</td><td>{{ p.entries }}</td>
+        <td>{{ p.last|dt if p.last else 'não visto no período' }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">Nenhum membro cadastrado.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+{% if days and mat %}
+<section class="card">
+  <h2>Primeira identificação de cada dia</h2>
+  <div class="scroll"><table class="matrix">
+    <thead><tr><th>Membro</th>{% for d in days %}<th><a href="{{ url_for('hoje', d=d.isoformat()) }}">{{ d|ddmm }}</a><small>{{ ['seg','ter','qua','qui','sex','sáb','dom'][d.weekday()] }}</small></th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for r in mat %}
+      <tr><td>{{ r.name }}</td>
+      {% for v in r.cells %}<td class="cell" style="--a:{{ 0.55 if v else 0 }}">{{ v|hm if v else '' }}</td>{% endfor %}</tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Todas as identificações</h2>
+  {% if sessoes %}
+  <div class="scroll"><table>
+    <thead><tr><th>Data</th><th>Horário</th><th>Membro</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessoes %}
+      <tr>
+        <td>{{ s.start_ts|dia }}</td>
+        <td>{{ s.start_ts|hm }}</td>
+        <td>{{ s.name }}</td>
+        <td class="links">
+          {% if s.snapshot_path|file_ok %}<a href="{{ url_for('media', p=s.snapshot_path) }}" target="_blank">foto</a>{% endif %}
+          {% if s.clip_path|file_ok %}<a href="{{ url_for('media', p=s.clip_path) }}" target="_blank">vídeo</a>{% endif %}
+          <form method="post" action="{{ url_for('sessao_excluir', sid=s.id) }}" onsubmit="return confirm('Excluir esta identificação? Use quando o sistema confundiu a pessoa.')"><button class="link danger" title="Excluir registro">excluir</button></form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">Nenhuma identificação no período.</p>{% endif %}
+</section>
+{% endblock %}

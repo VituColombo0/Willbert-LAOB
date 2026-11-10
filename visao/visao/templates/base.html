@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Visão{% endblock %} · Visão</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="{{ url_for('hoje') }}"><span class="dot"></span>Visão</a>
+    <nav>
+      {% set ep = request.endpoint or '' %}
+      <a href="{{ url_for('hoje') }}" class="{{ 'on' if ep == 'hoje' }}">Hoje</a>
+      <a href="{{ url_for('ao_vivo') }}" class="{{ 'on' if ep == 'ao_vivo' }}">Ao vivo</a>
+      <a href="{{ url_for('relatorio') }}" class="{{ 'on' if ep == 'relatorio' }}">Relatório</a>
+      <a href="{{ url_for('membros') }}" class="{{ 'on' if ep.startswith('membros') }}">Membros</a>
+      <a href="{{ url_for('revisao') }}" class="{{ 'on' if ep == 'revisao' }}">Revisão{% if pending_review %}<span class="badge">{{ pending_review }}</span>{% endif %}</a>
+      <a href="{{ url_for('logout') }}" class="muted">Sair</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+  {% endwith %}
+  {% block body %}{% endblock %}
+</main>
+</body>
+</html>

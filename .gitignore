@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+# segredos e dados locais (nunca no git)
+config.toml
+*.db
+data/
+models/
+*.onnx
+*.gguf

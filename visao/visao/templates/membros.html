@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block title %}Membros{% endblock %}
+{% block body %}
+<div class="head-row"><h1>Membros</h1></div>
+
+<section class="card">
+  <h2>Cadastrar membro</h2>
+  <form method="post" enctype="multipart/form-data" class="form-row">
+    <label>Nome<input name="nome" required maxlength="80" placeholder="Nome da pessoa"></label>
+    <label>Fotos do rosto <small class="muted">(opcional, JPG/PNG, uma pessoa por foto)</small>
+      <input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple></label>
+    <button class="btn">Cadastrar</button>
+  </form>
+  <p class="muted small">Dica: fotos de celular servem para começar, mas a captura pela própria câmera
+    (na página do membro) reconhece melhor, porque usa a mesma luz, ângulo e distância do laboratório.</p>
+</section>
+
+<section class="grid-cards">
+  {% for m in membros %}
+  <a class="card member {{ 'dim' if not m.active }}" href="{{ url_for('membros_detalhe', mid=m.id) }}">
+    {% if m.thumb|file_ok %}<img src="{{ url_for('media', p=m.thumb) }}" alt="">{% else %}<span class="ph"></span>{% endif %}
+    <div>
+      <b>{{ m.name }}</b>
+      {% if m.id in present %}<span class="pill ok">visto agora há pouco</span>{% endif %}
+      {% if not m.active %}<span class="pill">inativo</span>{% endif %}
+      <small>{{ m.n_ok }} amostra(s){% if m.n_pend %} · {{ m.n_pend }} processando{% endif %}</small>
+      <small>{% if m.last_seen %}visto {{ m.last_seen|dt }}{% else %}nunca visto{% endif %}</small>
+      {% if m.n_ok == 0 %}<small class="warn-text">sem amostras: não será reconhecido</small>
+      {% elif m.n_ok < 5 and m.active %}<small class="warn-text">poucas amostras: abra e use "Capturar pela câmera"</small>{% endif %}
+    </div>
+  </a>
+  {% else %}
+  <p class="muted">Nenhum membro ainda.</p>
+  {% endfor %}
+</section>
+{% endblock %}

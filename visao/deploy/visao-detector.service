@@ -1,0 +1,31 @@
+[Unit]
+Description=Visão - detecção e reconhecimento facial (câmera Tapo C200)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=visao
+Group=visao
+WorkingDirectory=/opt/visao/app
+Environment=VISAO_CONFIG=/opt/visao/config.toml
+Environment=PYTHONUNBUFFERED=1
+Environment=OPENCV_LOG_LEVEL=ERROR
+# sem espera ativa no pool de threads do OpenCV (gastava CPU à toa entre os quadros)
+Environment=OPENCV_THREAD_POOL_ACTIVE_WAIT_WORKER=0
+Environment=OPENCV_THREAD_POOL_ACTIVE_WAIT_MAIN=0
+# cache dos WSDL do ONVIF (zeep); o home /opt/visao não é gravável pelo serviço
+CacheDirectory=visao
+Environment=XDG_CACHE_HOME=/var/cache/visao
+ExecStartPre=/bin/mkdir -p /dev/shm/visao
+ExecStart=/opt/visao/venv/bin/python -m visao.detector
+Restart=always
+RestartSec=5
+Nice=5
+# deixa o detector dar prioridade maior à decodificação do vídeo (nice -10 no ffmpeg)
+AmbientCapabilities=CAP_SYS_NICE
+MemoryMax=650M
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

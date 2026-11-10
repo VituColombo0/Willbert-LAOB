@@ -1,0 +1,6 @@
+# Instalado pelo deploy/install.sh usando o piwheels (wheels ARMv7 com NEON).
+opencv-python-headless>=4.10
+numpy
+onvif-zeep
+flask>=3.0
+waitress

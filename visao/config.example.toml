@@ -1,0 +1,69 @@
+# Configuração do Visão. Copiada para /opt/visao/config.toml na instalação.
+# Esse arquivo tem a senha da câmera: fica fora do repositório (root:visao, 640).
+# Depois de editar: systemctl restart visao-detector visao-web
+
+[camera]
+host = "192.168.0.166"     # IP da Tapo C200 na rede local
+user = "USUARIO_DA_CAMERA" # "Conta da câmera" criada no app Tapo
+password = "SENHA_DA_CAMERA"
+# rtsp_port = 554
+# onvif_port = 2020
+
+[detection]
+# Valores calibrados com a C200 em 720p; só mexa se souber o efeito.
+# accept = 0.36          # mais alto = menos confusões, mas mais "não identificado"
+# unknown = 0.26         # abaixo disso a leitura conta para o alerta de desconhecido
+# min_face_px = 36       # rostos menores que isso são ignorados para reconhecimento
+# auto_enrich = true     # aprende novas amostras quando a certeza é alta
+
+[presence]
+# Sem ver a pessoa por esse tempo, considera que ela saiu (a saída fica
+# registrada no horário em que ela foi vista pela última vez).
+session_gap_min = 30
+
+[storage]
+retention_days = 7         # apaga histórico (presenças, eventos, fotos e vídeos) mais antigo que isso
+min_free_mb = 800          # apaga os clipes mais antigos se o disco encher
+record_clips = true        # grava clipes de ~30 s em 1080p nas entradas e alertas
+
+[web]
+host = "0.0.0.0"
+port = 8080
+
+[greeting]
+# Cumprimento falado pelo alto-falante da câmera na primeira vez que vê o membro no dia.
+enabled = true
+# Frases sorteadas ({saudacao} = Bom dia / Boa tarde / Boa noite). Com 2 pessoas usa os dois
+# nomes; com 3 ou mais (ou alguém não identificado junto), cumprimenta o grupo.
+messages_one = ["{saudacao}, {nome}! Que bom te ver.", "Olá, {nome}! {saudacao}.", "{saudacao}, {nome}! Bom trabalho hoje."]
+messages_two = ["{saudacao}, {nome1} e {nome2}!", "Olá, {nome1} e {nome2}! {saudacao}."]
+messages_group = ["{saudacao}, pessoal! Que bom ver vocês.", "{saudacao} a todos!"]
+loudness = 1.5                    # volume da fala (1.0 = original; 1.5 = +50%)
+group_window_s = 5                # sozinho: fala na hora; com outros rostos, espera até 5 s para juntar
+engine = "piper"                  # piper = voz neural natural; espeak = robótica (reserva)
+voice = "mb-br3"                  # mb-br1, mb-br3, mb-br4 ou pt-br
+# Por onde sai o som: "local" = caixinha/fone no conector AV da TV Box (ou HDMI),
+# "camera" = alto-falante da Tapo, "auto" = tenta a câmera e, se falhar, usa o local.
+output = "camera"
+local_device = "plughw:CARD=analog,DEV=0"   # HDMI: "plughw:CARD=HDMI,DEV=0"
+# Senha da CONTA TAPO (a do app), necessária para mandar áudio para a câmera.
+# Depois de preencher: visao-cli go2rtc-config && systemctl restart visao-go2rtc
+tapo_cloud_password = ""
+tapo_auth = "sha256"              # C200 com firmware novo: sha256 (outros: md5, plain)
+# Também é preciso ligar no app Tapo: Eu → Tapo Lab → Compatibilidade com terceiros.
+# Teste com uma única tentativa: visao-cli testar-camera
+
+[security]
+# Modo segurança: qualquer movimento nesse horário vira alerta com foto e vídeo
+# (e Telegram, se configurado). Deixe desligado se alguém trabalha de madrugada.
+enabled = false
+start = "23:00"
+end = "06:00"
+cooldown_min = 5
+
+[telegram]
+# Opcional: crie um bot com o @BotFather e coloque o token e o chat_id.
+token = ""
+chat_id = ""
+notify_unknown = true      # foto quando aparece alguém não cadastrado
+notify_entries = false     # aviso a cada chegada de membro

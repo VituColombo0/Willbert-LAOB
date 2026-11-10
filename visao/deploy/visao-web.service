@@ -1,0 +1,19 @@
+[Unit]
+Description=Visão - interface web de presença (porta 8080)
+After=network-online.target visao-detector.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=visao
+Group=visao
+WorkingDirectory=/opt/visao/app
+Environment=VISAO_CONFIG=/opt/visao/config.toml
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/visao/venv/bin/python -m visao.web
+Restart=always
+RestartSec=5
+MemoryMax=200M
+
+[Install]
+WantedBy=multi-user.target

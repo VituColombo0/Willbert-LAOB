@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block title %}{{ m.name }}{% endblock %}
+{% block head %}{% if busy %}<meta http-equiv="refresh" content="3">{% endif %}{% endblock %}
+{% block body %}
+<div class="head-row">
+  <h1><a class="muted" href="{{ url_for('membros') }}">Membros</a> / {{ m.name }}</h1>
+</div>
+
+<section class="stats">
+  <div class="card stat"><div class="k">Amostras válidas</div><div class="v">{{ samples|selectattr('status', 'equalto', 'ok')|list|length }}</div></div>
+  <div class="card stat"><div class="k">Dias em que foi visto</div><div class="v">{{ resumo.n_days if resumo else 0 }}</div></div>
+  <div class="card stat"><div class="k">Identificações</div><div class="v">{{ resumo.entries if resumo else 0 }}</div></div>
+  <div class="card stat"><div class="k">Última vez visto</div><div class="v small-v">{{ resumo.last|dt if resumo else '—' }}</div></div>
+</section>
+
+<div class="two">
+<section class="card">
+  <h2>Melhorar o reconhecimento</h2>
+  <h3>Capturar pela câmera <small class="muted">(recomendado)</small></h3>
+  {% if cap and cap.status == 'ativo' %}
+    <p><span class="pill ok">capturando</span> {{ cap.captured }} de {{ cap.target }} amostras. A pessoa deve ficar
+      sozinha na frente da câmera, olhar para ela e virar o rosto devagar para os lados.</p>
+    <form method="post" action="{{ url_for('membros_capturar_cancelar', mid=m.id) }}"><button class="btn ghost">Parar captura</button></form>
+  {% else %}
+    {% if cap %}<p class="muted small">Última captura: {{ cap.captured }} amostra(s) · {{ cap.status }} · {{ cap.created_at|dt }}</p>{% endif %}
+    <form method="post" action="{{ url_for('membros_capturar', mid=m.id) }}"><button class="btn">Iniciar captura (90 s)</button></form>
+  {% endif %}
+  <h3>Enviar fotos</h3>
+  <form method="post" action="{{ url_for('membros_fotos', mid=m.id) }}" enctype="multipart/form-data" class="form-row">
+    <input type="file" name="fotos" accept="image/jpeg,image/png,image/webp" multiple required>
+    <button class="btn ghost">Enviar</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Dados</h2>
+  <form method="post" action="{{ url_for('membros_editar', mid=m.id) }}" class="stack">
+    <label>Nome<input name="nome" value="{{ m.name }}" required maxlength="80"></label>
+    <label>Observações<input name="notas" value="{{ m.notes }}" maxlength="200"></label>
+    <label class="check"><input type="checkbox" name="ativo" {{ 'checked' if m.active }}> Ativo (desmarque para parar de reconhecer)</label>
+    <button class="btn ghost">Salvar</button>
+  </form>
+  <form method="post" action="{{ url_for('membros_excluir', mid=m.id) }}" onsubmit="return confirm('Excluir {{ m.name }} com todas as fotos, amostras e o histórico de presença? Não dá para desfazer.')">
+    <button class="link danger">Excluir membro e todos os dados</button>
+  </form>
+</section>
+</div>
+
+<section class="card">
+  <h2>Amostras de rosto</h2>
+  {% if samples %}
+  <div class="samples">
+    {% for s in samples %}
+    <figure class="sample {{ s.status }}">
+      {% set img = s.crop_path if s.crop_path|file_ok else s.image_path %}
+      {% if img|file_ok %}<img src="{{ url_for('media', p=img) }}" alt="">{% else %}<span class="ph"></span>{% endif %}
+      <figcaption>
+        <span class="pill {{ 'ok' if s.status == 'ok' else ('unknown' if s.status == 'erro' else '') }}">{{ s.status }}</span>
+        <small>{{ {'foto': 'foto enviada', 'camera': 'câmera', 'revisao': 'revisão', 'auto': 'automática'}.get(s.source, s.source) }}</small>
+        {% if s.message %}<small class="{{ 'warn-text' if s.status == 'erro' or 'atenção' in s.message }}">{{ s.message }}</small>{% endif %}
+        <form method="post" action="{{ url_for('amostra_excluir', sid=s.id) }}"><button class="link danger">remover</button></form>
+      </figcaption>
+    </figure>
+    {% endfor %}
+  </div>
+  {% else %}<p class="muted">Nenhuma amostra. Sem amostras a pessoa não é reconhecida.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Identificações recentes</h2>
+  {% if sessoes %}
+  <div class="scroll"><table>
+    <thead><tr><th>Data</th><th>Horário</th><th>Certeza</th><th></th></tr></thead>
+    <tbody>
+    {% for s in sessoes %}
+      <tr><td>{{ s.start_ts|dia }}</td><td>{{ s.start_ts|hm }}</td>
+        <td>{{ '%.2f'|format(s.best_score) if s.best_score is not none else '—' }}</td>
+        <td class="links">{% if s.snapshot_path|file_ok %}<a href="{{ url_for('media', p=s.snapshot_path) }}" target="_blank">foto</a>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="muted">Ainda não foi identificado pela câmera.</p>{% endif %}
+</section>
+{% endblock %}

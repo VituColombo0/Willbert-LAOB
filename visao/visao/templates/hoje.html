@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}{{ titulo }}{% endblock %}
+{% block head %}{% if is_today %}<meta http-equiv="refresh" content="60">{% endif %}{% endblock %}
+{% block body %}
+<div class="head-row">
+  <h1>{{ titulo }} <small class="muted">{{ d.strftime('%d/%m/%Y') if is_today }}</small></h1>
+  <form class="inline" method="get">
+    <a class="btn ghost" href="?d={{ prev }}" title="Dia anterior">‹</a>
+    <input type="date" name="d" value="{{ d.isoformat() }}" onchange="this.form.submit()">
+    <a class="btn ghost" href="?d={{ next }}" title="Próximo dia">›</a>
+    {% if not is_today %}<a class="btn ghost" href="{{ url_for('hoje') }}">Hoje</a>{% endif %}
+  </form>
+</div>
+
+{% if warn and is_today %}<div class="flash warn">{{ warn }}</div>{% endif %}
+
+<section class="stats">
+  <div class="card stat"><div class="k">Membros identificados</div><div class="v">{{ vistos|length }}</div></div>
+  <div class="card stat"><div class="k">Identificações</div><div class="v">{{ vistos|sum(attribute='entries') }}</div></div>
+  <div class="card stat"><div class="k">Não identificados</div><div class="v {{ 'bad' if n_unknown }}">{{ n_unknown }}</div></div>
+</section>
+
+<section class="card">
+  <h2>Quem foi identificado</h2>
+  {% if vistos %}
+  <ul class="people">
+    {% for p in vistos %}
+    <li>
+      {% if p.crop|file_ok %}<img src="{{ url_for('media', p=p.crop) }}" alt="">{% else %}<span class="ph"></span>{% endif %}
+      <div><a href="{{ url_for('membros_detalhe', mid=p.member_id) }}"><b>{{ p.name }}</b></a>
+        <small>primeira vez {{ p.first|hm }}{% if p.last - p.first > 120 %} · última vez {{ p.last|hm }}{% endif %}</small></div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Ninguém identificado neste dia.</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Eventos</h2>
+  {% if events %}
+  <ul class="events">
+    {% for e in events %}
+    <li class="ev-{{ e.kind }}">
+      <time>{{ e.ts|hm }}</time>
+      {% if e.crop_path|file_ok %}<img src="{{ url_for('media', p=e.crop_path) }}" alt="">{% else %}<span class="ph sm"></span>{% endif %}
+      <div class="grow">
+        <span class="pill {{ e.kind }}">{{ kind_label[e.kind] }}</span>
+        {% if e.kind == 'after_hours' %}movimento no laboratório no horário vigiado
+        {% elif e.kind in ('unknown', 'uncertain') %}
+          {% if e.member_id %}depois identificado como <b>{{ e.name }}</b>{% elif e.kind == 'unknown' %}pessoa não cadastrada{% if e.details %} <small class="muted">· {{ e.details }}</small>{% endif %}{% else %}rosto não reconhecido <a href="{{ url_for('revisao') }}">(revisar)</a>{% endif %}
+        {% else %}<b>{{ e.name or '—' }}</b>
+          {% if e.score %}<small class="muted">certeza {{ '%.2f'|format(e.score) }}</small>{% endif %}
+        {% endif %}
+      </div>
+      <div class="links">
+        {% if e.snapshot_path|file_ok %}<a href="{{ url_for('media', p=e.snapshot_path) }}" target="_blank">foto</a>{% endif %}
+        {% if e.clip_path|file_ok %}<a href="{{ url_for('media', p=e.clip_path) }}" target="_blank">vídeo</a>{% endif %}
+        {% if e.kind == 'entry' %}
+        <details class="fix"><summary>corrigir</summary>
+          <form method="post" action="{{ url_for('evento_corrigir', eid=e.id) }}">
+            <select name="member_id">
+              <option value="">Na verdade é…</option>
+              {% for m in membros if m.id != e.member_id %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+              <option value="0">alguém não cadastrado</option>
+            </select>
+            <button class="btn sm">Corrigir</button>
+          </form>
+        </details>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Sem eventos.</p>{% endif %}
+</section>
+{% endblock %}
