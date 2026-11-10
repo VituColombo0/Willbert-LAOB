@@ -49,12 +49,14 @@ id visao >/dev/null 2>&1 || useradd --system --home-dir "$BASE" --no-create-home
 usermod -aG audio,video visao
 mkdir -p "$BASE"/{app,data,models/whisper,bin,piper,voices}
 
-echo "[4/9] ambiente Python"
+echo "[4/9] ambiente Python ($(python3 --version))"
 [ -x "$BASE/venv/bin/python" ] || python3 -m venv "$BASE/venv"
 "$BASE/venv/bin/pip" install -q --upgrade pip
 "$BASE/venv/bin/pip" install -q -r "$SRC/requirements-pc.txt"
-if command -v nvidia-smi >/dev/null && nvidia-smi >/dev/null 2>&1; then
+CC="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | sort -rn | head -1 || true)"
+if [ -n "$CC" ] && awk -v c="$CC" 'BEGIN{exit !(c >= 7.0)}'; then
   # bibliotecas CUDA 12 / cuDNN 9 que o faster-whisper (CTranslate2) usa na placa
+  # (placas antigas, compute capability < 7.0, não rodam o CTranslate2 atual: ficam de fora)
   "$BASE/venv/bin/pip" install -q nvidia-cublas-cu12 "nvidia-cudnn-cu12==9.*"
 fi
 

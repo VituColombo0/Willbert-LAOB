@@ -47,7 +47,8 @@ class Ouvido:
             t0 = time.time()
             self.model = WhisperModel(self.scfg.model, device=self.scfg.device,
                                       compute_type=self.scfg.compute_type,
-                                      download_root=self.scfg.download_root)
+                                      download_root=self.scfg.download_root,
+                                      cpu_threads=int(self.scfg.get("cpu_threads") or 0))
             log.info("Whisper '%s' (%s/%s) carregado em %.0f s", self.scfg.model, self.scfg.device,
                      self.scfg.compute_type, time.time() - t0)
         except Exception as e:
@@ -65,6 +66,7 @@ class Ouvido:
                 segs, _ = self.model.transcribe(
                     audio, language="pt", beam_size=int(self.scfg.beam_size), vad_filter=False,
                     condition_on_previous_text=False, initial_prompt=self.scfg.prompt,
+                    without_timestamps=True,
                     no_speech_threshold=0.6, temperature=0.0)
                 texto = " ".join(s.text.strip() for s in segs
                                  if s.no_speech_prob < 0.6 and s.avg_logprob > -1.2).strip()

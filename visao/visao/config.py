@@ -1,6 +1,9 @@
 """Carrega a configuração (TOML) e completa com valores padrão."""
 import os
-import tomllib
+try:
+    import tomllib
+except ImportError:  # Python 3.10 (Ubuntu 22.04)
+    import tomli as tomllib
 from urllib.parse import quote
 
 DEFAULTS = {
@@ -138,6 +141,9 @@ DEFAULTS = {
         "max_utterance_s": 12,
         "mute_after_speech_s": 0.6,  # ignora o microfone logo depois de falar (eco do alto-falante)
         "max_answer_chars": 240,   # resposta curta = fala clara e rápida
+        # se o LLM passar desse tempo, fala um aviso curto enquanto pensa (0 = nunca)
+        "thinking_s": 1.8,
+        "thinking_phrases": ["Só um instante.", "Hum, deixa eu pensar.", "Um momento."],
     },
     "llm": {
         "url": "http://127.0.0.1:11434",  # Ollama local
@@ -146,12 +152,15 @@ DEFAULTS = {
         "temperature": 0.5,
         "timeout_s": 25,
         "keep_alive": "24h",       # mantém o modelo carregado: sem espera na primeira pergunta
+        "num_thread": 0,           # 0 = o Ollama decide; o perfil usa núcleos - 1
+        "num_gpu": -1,             # -1 = o Ollama decide; 0 = só CPU (perfis sem placa boa)
     },
     "stt": {
         "model": "",               # faster-whisper: small / large-v3-turbo (o perfil escolhe)
         "device": "cpu",
         "compute_type": "int8",
         "beam_size": 1,
+        "cpu_threads": 0,          # 0 = padrão do faster-whisper; o perfil usa núcleos - 1
         "download_root": "/opt/visao/models/whisper",
         # nomes que o Whisper deve reconhecer (ajuda a escrever certo)
         "prompt": "Willbert, Victor, Gazziro, Mario, Lucas, laboratório.",
@@ -194,8 +203,13 @@ def load(path=None, detect_hardware=True):
         merged.update(profile_vals.get(sec, {}))
         merged.update(user.get(sec, {}))
         cfg[sec] = merged
-    if cfg.detection.get("threads") == "cores":
-        cfg.detection["threads"] = min(os.cpu_count() or 4, 8)
+    n = os.cpu_count() or 4
+    for sec, key in (("detection", "threads"), ("llm", "num_thread"), ("stt", "cpu_threads")):
+        v = cfg[sec].get(key)
+        if v == "cores":
+            cfg[sec][key] = min(n, 8)
+        elif v == "cores-1":
+            cfg[sec][key] = max(1, min(n - 1, 8))
     cfg.hardware["active"] = profile or "padrão"
     cfg.hardware["info"] = hw
     return cfg

@@ -26,7 +26,9 @@ log = logging.getLogger("visao.assistente")
 def norm(texto):
     """minúsculas, sem acento e sem pontuação (para comparar)."""
     t = unicodedata.normalize("NFKD", texto or "").encode("ascii", "ignore").decode().lower()
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", t)).strip()
+    t = re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]", " ", t)).strip()
+    # erros comuns do Whisper pequeno: "que aora são", "que oras são"
+    return re.sub(r"\b(?:a|h)?oras?\b", lambda m: "horas" if m.group(0).endswith("s") else "hora", t)
 
 
 def acha_nome(texto_norm, palavras, limiar=0.84):
@@ -98,7 +100,19 @@ class Assistente:
             if r:
                 return r
         if self.llm is not None and self.llm.enabled:
-            r = self.llm.chat(pedido, self.fatos_texto(fatos), self.historico)
+            # PC lento: se o LLM demorar, avisa em voz que está pensando (silêncio longo parece defeito)
+            espera = float(self.acfg.get("thinking_s", 0) or 0)
+            aviso = None
+            if espera > 0 and self.acfg.get("thinking_phrases"):
+                frase = self.acfg.thinking_phrases[self.respostas % len(self.acfg.thinking_phrases)]
+                aviso = threading.Timer(espera, self.speaker.speak_now, args=(frase,))
+                aviso.daemon = True
+                aviso.start()
+            try:
+                r = self.llm.chat(pedido, self.fatos_texto(fatos), self.historico)
+            finally:
+                if aviso:
+                    aviso.cancel()
             if r:
                 return r
             return "Desculpe, não consegui pensar numa resposta agora. Pode perguntar de novo?"

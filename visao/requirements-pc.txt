@@ -7,3 +7,4 @@ waitress
 # conversa pela câmera
 faster-whisper>=1.1
 webrtcvad-wheels
+tomli>=2; python_version < "3.11"

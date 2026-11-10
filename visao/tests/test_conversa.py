@@ -53,6 +53,8 @@ for frase in ("Willbert, que horas são?", "Wilbert que horas são", "Uilbert, q
     check(f"acha o nome em {frase!r}", achou and "horas" in resto, f"-> {resto!r}")
 achou, _ = acha_nome(norm("Gilberto, me passa o cabo"), cfg.assistant.wake_words)
 check("não confunde 'Gilberto' com o nome", not achou)
+check("Whisper errando 'que aora são' ainda vira pergunta de hora",
+      norm("Willbert, que aora são.") == "willbert que hora sao" and norm("embora agora") == "embora agora")
 achou, _ = acha_nome(norm("que horas são?"), cfg.assistant.wake_words)
 check("frase sem o nome não chama o assistente", not achou)
 
@@ -139,8 +141,11 @@ check("cumprimento do LLM que não cita a pessoa é descartado (usa a frase padr
       a.cumprimento(["Mario"], 1, fatos(), 2) is None)
 
 # --- perfis de hardware
-h = {"arch": "x86_64", "cpu": "x", "cores": 4, "ram_gb": 8, "gpus": [], "vram_gb": 0}
-check("PC fraco sem placa -> cpu", hardware.choose(h) == "cpu")
+h = {"arch": "x86_64", "cpu": "x", "cores": 6, "ram_gb": 8, "gpus": [], "vram_gb": 0, "avx2": True}
+check("PC sem placa, 6 núcleos -> cpu", hardware.choose(h) == "cpu")
+check("i5 antigo (4 núcleos, sem AVX2) -> cpu-basico",
+      hardware.choose(dict(h, cores=4, avx2=False)) == "cpu-basico")
+check("perfil cpu-basico usa Whisper base", hardware.PROFILES["cpu-basico"]["stt"]["model"] == "base")
 check("PC 8 núcleos/16 GB -> cpu-forte", hardware.choose(dict(h, cores=8, ram_gb=16)) == "cpu-forte")
 check("RTX 3060 12 GB -> gpu-forte", hardware.choose(dict(h, gpus=[("RTX 3060", 12)], vram_gb=12)) == "gpu-forte")
 check("GTX 1660 6 GB -> gpu", hardware.choose(dict(h, gpus=[("GTX 1660", 6)], vram_gb=6)) == "gpu")
@@ -152,4 +157,22 @@ check("sem perfil, padrões continuam os da TV Box", tv.detection.det_width == 5
 check("hora falada", fala.hora(datetime(2026, 1, 1, 13, 0)) == "uma hora da tarde")
 check("número por extenso", fala.numero(2026) == "dois mil e vinte e seis")
 srv.shutdown()
+# LLM lento: avisa que está pensando e depois responde
+class SpAviso:
+    playing, last_play_end = False, 0
+    def __init__(self): self.falas = []
+    def speak_now(self, t): self.falas.append(t)
+class LLMLento:
+    enabled = True
+    def chat(self, *a, **k): time.sleep(0.5); return "Brasília é a capital."
+cfg_l = load("/nonexistent.toml", detect_hardware=False); cfg_l.assistant["thinking_s"] = 0.2
+sp_a = SpAviso()
+al = Assistente(cfg_l, sp_a, lambda: {"agora": datetime.now(), "membros": [], "na_camera": [], "pessoa_falando": None,
+                                      "presentes": [], "hoje": [], "ultima_vez": {}}, LLMLento())
+al.ouviu("Willbert, qual a capital do Brasil?")
+check(f"LLM lento: aviso antes da resposta {sp_a.falas}", len(sp_a.falas) == 2 and sp_a.falas[0] in cfg_l.assistant.thinking_phrases)
+from visao.llm import cortar_frase_incompleta
+check("resposta cortada pelo limite fica só com frases completas",
+      cortar_frase_incompleta("A capital do Brasil é Brasília. Também é o") == "A capital do Brasil é Brasília.")
+check("resposta sem frase completa fica como está", cortar_frase_incompleta("Sim") == "Sim")
 print("TUDO OK" if ok else "HÁ FALHAS")

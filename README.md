@@ -32,8 +32,26 @@ registra quem passou pelo laboratório e agora **conversa**: chame "Willbert" pe
 | `gpu-forte` | NVIDIA 10+ GB | 1280 px, todo quadro | large-v3-turbo (GPU) | qwen3:8b | com contexto (LLM) |
 | `gpu` | NVIDIA 6–10 GB | 1280 px, todo quadro | large-v3-turbo (GPU, int8) | qwen3:4b | com contexto (LLM) |
 | `cpu-forte` | sem NVIDIA, 8+ núcleos, 16+ GB | 1280 px, todo quadro | small (CPU, int8) | qwen3:4b | frase pronta, voz na hora |
-| `cpu` | PC mais fraco | 960 px, 1 a cada 2 | small (CPU, int8) | qwen3:1.7b | frase pronta, voz na hora |
+| `cpu` | PC sem placa, até 7 núcleos | 960 px, 1 a cada 2 | small (CPU, int8) | qwen3:1.7b | frase pronta, voz na hora |
+| `cpu-basico` | PC antigo (sem AVX2 ou 4 núcleos) | 960 px, 1 a cada 2 | base (CPU, int8) | qwen3:1.7b (3 threads) | frase pronta, voz na hora |
 | `tvbox` | ARM com 1 GB | 576 px, 1 a cada 4 | — | — | frases geradas antes |
+
+Placas NVIDIA antigas (compute capability abaixo de 7.0, como a GTX 750 Ti) não contam como
+GPU: o faster-whisper atual não roda nelas e o Ollama só as usa pelo Vulkan, bem mais devagar
+que a CPU. O LLM e o Whisper usam um núcleo a menos que a máquina tem (com todos, a disputa
+com outros programas deixa o LLM quase parado). Se o LLM passar de 1,8 s, ele fala
+"Só um instante." para a espera não parecer defeito.
+
+Medido no PC do laboratório (i5-3330, 4 núcleos sem AVX2, GTX 750 Ti, junto com o SARndbox):
+
+| Etapa | Tempo |
+|---|---|
+| Detecção de rosto (YuNet 960 px, 2 threads) | ~50 ms por quadro |
+| Identificação (SFace) | ~35 ms por rosto |
+| Fala -> texto (Whisper base) | ~2,5 s por frase (small: ~9 s, inviável) |
+| Resposta pronta (hora, quem chegou...) | instantânea |
+| Resposta do LLM (qwen3:1.7b) | 4–10 s |
+| Voz (Piper Faber, frase curta) | ~1,4 s |
 
 Qwen3 foi escolhido por ser o melhor modelo local pequeno em português do Brasil
 ([comparativo](https://www.promptquorum.com/local-llms/best-local-llms-portuguese-language-2026));
