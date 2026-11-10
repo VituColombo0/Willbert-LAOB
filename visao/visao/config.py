@@ -97,9 +97,9 @@ DEFAULTS = {
         "engine": "piper",                   # piper (voz neural, natural) ou espeak (robótica, leve)
         "piper_bin": "/opt/visao/piper/piper",
         "piper_model": "/opt/visao/voices/pt_BR-faber-medium.onnx",  # escolhida ouvindo Faber, Jeff e Cadu
-        "piper_length_scale": 1.05,          # >1 fala mais devagar
+        "piper_length_scale": 1.2,           # >1 fala mais devagar; 1.2 = "Faber mais calma" (Victor, 2026-11-10)
         # vozes anteriores [modelo, length_scale]: usadas enquanto uma voz nova gera as frases
-        "piper_fallback": [],
+        "piper_fallback": [["/opt/visao/voices/pt_BR-faber-medium.onnx", 1.05]],
         "once_per": "periodo",               # periodo = 1x de manhã, 1x à tarde, 1x à noite; "dia" = 1x por dia
         "voice": "mb-br3",                   # espeak-ng: mb-br1, mb-br3, mb-br4 ou pt-br
         "speed": 145,

@@ -56,7 +56,7 @@ Medido no PC do laboratório (i5-3330, 4 núcleos sem AVX2, GTX 750 Ti, junto co
 | Fala -> texto (Whisper base) | ~2,5 s por frase (small: ~9 s, inviável) |
 | Resposta pronta (hora, quem chegou...) | instantânea |
 | Resposta do LLM (qwen3:1.7b) | 4–10 s |
-| Voz (Piper Faber, frase curta) | ~1,4 s |
+| Voz (Piper Faber "calma", frase curta) | ~1,4 s |
 
 Qwen3 foi escolhido por ser o melhor modelo local pequeno em português do Brasil
 ([comparativo](https://www.promptquorum.com/local-llms/best-local-llms-portuguese-language-2026));
