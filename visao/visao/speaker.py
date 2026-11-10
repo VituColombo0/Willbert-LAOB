@@ -335,7 +335,8 @@ class Speaker:
         silence = b"\x00" * int(params.framerate * pad) * params.sampwidth * params.nchannels
         with wave.open(tmp + ".pad", "wb") as dst:
             dst.setparams(params)
-            dst.writeframes(silence + frames + silence[: len(silence) // 2])
+            quadro = params.sampwidth * params.nchannels  # metade do silêncio, sem cortar uma amostra ao meio
+            dst.writeframes(silence + frames + silence[: len(silence) // 2 // quadro * quadro])
         os.remove(tmp)
         os.replace(tmp + ".pad", path)
         return path
