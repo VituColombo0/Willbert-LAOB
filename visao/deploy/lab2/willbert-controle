@@ -1,0 +1,73 @@
+#!/bin/bash
+# Liga/desliga o Willbert no lab2 sem pedir senha (sudoers libera SÓ este arquivo).
+# Instalado como root em /usr/local/sbin/willbert-controle pelo otimizar.sh.
+#   sudo willbert-controle ligar | desligar | estado | testar-camera | importar | foto
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+B=/opt/visao
+PACOTE=/home/laob/.willbert-migracao/pacote.tar
+FOTO=/home/laob/SARndbox-rosto/fotos/camera.jpg
+
+stream() { "$B/venv/bin/python" - <<'PY'
+import os, sys
+sys.path.insert(0, "/opt/visao/app")
+os.environ["VISAO_CONFIG"] = "/opt/visao/config.toml"
+from visao.config import load
+print(load(detect_hardware=False).greeting.get("stream", "camera"))
+PY
+}
+
+case "${1:-}" in
+  ligar)
+    systemctl start ollama visao-go2rtc visao-detector visao-web
+    systemctl is-active ollama visao-go2rtc visao-detector visao-web | paste -sd' ' ;;
+  desligar)
+    systemctl stop visao-detector visao-go2rtc ollama
+    systemctl is-active ollama visao-go2rtc visao-detector | paste -sd' ' ;;
+  estado)
+    for u in ollama visao-go2rtc visao-detector visao-web; do printf '%s=%s ' "$u" "$(systemctl is-active $u)"; done; echo
+    journalctl -u visao-detector -n 15 --no-pager -o cat 2>/dev/null | grep -viE 'senha|password' || true ;;
+  testar-camera)
+    VISAO_CONFIG=$B/config.toml visao-cli testar-camera ;;
+  importar)
+    # pacote do mini servidor (feito pelo migrar-do-miniserver.sh); só arquivos esperados
+    [ -f "$PACOTE" ] || { echo "falta $PACOTE"; exit 1; }
+    systemctl stop visao-detector visao-web 2>/dev/null || true
+    M=$(mktemp -d /root/willbert-migracao.XXXX)
+    # (o tar do GNU já recusa caminhos absolutos e "..")
+    tar -C "$M" --no-same-owner --no-same-permissions -xf "$PACOTE"
+    [ -f "$M/config.toml" ] && [ -f "$M/data/migracao.db" ] || { echo "pacote incompleto"; rm -rf "$M"; exit 1; }
+    [ -f "$B/config.toml" ] && cp "$B/config.toml" "$B/config.toml.antes-da-migracao"
+    cp "$M/config.toml" "$B/config.toml"
+    rm -f "$B/data/visao.db" "$B/data/visao.db-wal" "$B/data/visao.db-shm"
+    mv "$M/data/migracao.db" "$B/data/visao.db"
+    [ -f "$M/data/web_auth.json" ] && cp "$M/data/web_auth.json" "$B/data/"
+    for d in members events tts; do [ -d "$M/data/$d" ] && rsync -a "$M/data/$d/" "$B/data/$d/"; done
+    rm -rf "$M" "$PACOTE"
+    "$B/venv/bin/python" - <<'PY'
+import re
+p = "/opt/visao/config.toml"
+s = open(p).read()
+for k in ("det_width", "frame_every", "max_rec_per_cycle", "threads", "classic_engine"):
+    s = re.sub(rf"(?m)^\s*{k}\s*=.*\n", "", s)  # ajustes da TV Box: aqui o perfil decide
+open(p, "w").write(s)
+PY
+    VISAO_CONFIG=$B/config.toml visao-cli go2rtc-config --saida "$B/go2rtc.yaml" >/dev/null
+    chown root:visao "$B/config.toml" "$B/go2rtc.yaml"; chmod 640 "$B/config.toml" "$B/go2rtc.yaml"
+    chown -R visao:visao "$B/data"
+    systemctl start visao-web
+    echo "importado; Willbert continua desligado (use: willbert-controle ligar)" ;;
+  foto)
+    # um quadro da câmera para o modo Rosto do SARndbox
+    ligado=$(systemctl is-active visao-go2rtc || true)
+    [ "$ligado" = active ] || { systemctl start visao-go2rtc; sleep 4; }
+    mkdir -p "$(dirname "$FOTO")"
+    ok=0
+    curl -fsS -m 20 -o "$FOTO.tmp" "http://127.0.0.1:1984/api/frame.jpeg?src=$(stream)" && ok=1
+    [ "$ligado" = active ] || systemctl stop visao-go2rtc
+    [ $ok = 1 ] || { rm -f "$FOTO.tmp"; echo "não consegui a foto da câmera"; exit 1; }
+    mv "$FOTO.tmp" "$FOTO"; chown laob:laob "$FOTO" "$(dirname "$FOTO")"
+    echo "$FOTO" ;;
+  *)
+    echo "uso: willbert-controle ligar|desligar|estado|testar-camera|importar|foto"; exit 2 ;;
+esac
