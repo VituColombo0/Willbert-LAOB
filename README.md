@@ -68,22 +68,26 @@ O instalador: instala o driver NVIDIA se houver placa sem driver (pede reiniciar
 novo), o Ollama com o modelo do perfil, o Whisper, o Piper (voz Faber), o go2rtc e os serviços
 `visao-go2rtc`, `visao-detector` e `visao-web` (:8080). Pode rodar de novo para atualizar.
 
-Depois, para trazer cadastros, histórico e a configuração da câmera do mini servidor (de uma
-máquina com SSH para os dois):
+Depois, a câmera, a conta Tapo e a senha do site (as senhas são digitadas escondidas e ficam
+só no `/opt/visao/config.toml`):
 
 ```bash
-bash visao/deploy/migrar-do-miniserver.sh <ssh-do-pc> miniserver-root
+sudo bash visao/deploy/lab2/configurar.sh
 ```
 
-## Mini-Server como reserva
+Os membros são cadastrados pelo site (:8080), com fotos ou pela câmera.
 
-`visao/deploy/reserva/` instala na TV Box um verificador a cada 30 s: se o PC não responder em
-`/saude` 3 vezes seguidas (~90 s), a TV Box liga o Visão e assume a câmera; quando o PC volta,
-ela desliga. Nunca os dois ao mesmo tempo (a câmera falaria duas vezes).
+## No lab2 (PC do laboratório)
 
-```bash
-scp -r visao/deploy/reserva miniserver-root:/tmp/ && ssh miniserver-root 'sh /tmp/reserva/instalar.sh http://<ip-do-pc>:8080'
-```
+O lab2 também roda a caixa de areia com projetor (código em
+[Projetor-LAOB](https://github.com/VituColombo0/Projetor-LAOB)), então o Willbert fica desligado e
+só liga quando pedido. Os scripts de `visao/deploy/lab2/` (detalhes no README da pasta):
+
+| Script | Para quê |
+|---|---|
+| `configurar.sh` | câmera, conta Tapo e site, do zero |
+| `otimizar.sh` / `desfazer.sh` | desempenho do PC para o SARndbox + Willbert (reversível) |
+| `willbert-controle` | liga/desliga/estado/testar-camera/foto sem senha (`sudo -n`) |
 
 ## Testes (sem câmera)
 
@@ -98,7 +102,7 @@ visao-cli conversar --mudo      # no PC instalado: digite perguntas e veja as re
 
 - Medir o tempo real e trocar o SFace por ArcFace/InsightFace se houver GPU (mais preciso de lado e de longe).
 - Relatórios em linguagem natural ("resumo da semana").
-- Backup diário do banco do PC na TV Box.
+- Backup diário do banco (`/opt/visao/data`).
 
 ## Segredos
 

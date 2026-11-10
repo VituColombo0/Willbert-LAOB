@@ -17,7 +17,7 @@ GO2RTC_VER="${GO2RTC_VER:-v1.9.15}"
 PIPER_REL="${PIPER_REL:-2023.11.14-2}"
 
 [ "$(id -u)" = 0 ] || { echo "rode como root (sudo)"; exit 1; }
-[ "$(uname -m)" = x86_64 ] || { echo "este instalador é para PC x86_64 (na TV Box use install.sh)"; exit 1; }
+[ "$(uname -m)" = x86_64 ] || { echo "este instalador é para PC x86_64"; exit 1; }
 
 echo "[1/9] pacotes do sistema"
 export DEBIAN_FRONTEND=noninteractive
@@ -89,7 +89,7 @@ rsync -a --delete --exclude '__pycache__' "$SRC/visao/" "$BASE/app/visao/"
 install -m 755 "$SRC/deploy/visao-cli" /usr/local/bin/visao-cli
 if [ ! -f "$BASE/config.toml" ]; then
   cp "$SRC/config.example.toml" "$BASE/config.toml"
-  echo "  >> edite $BASE/config.toml (ou traga o do mini servidor com deploy/migrar-do-miniserver.sh)"
+  echo "  >> configure a câmera e o site: sudo bash visao/deploy/lab2/configurar.sh"
 fi
 chown root:visao "$BASE/config.toml"; chmod 640 "$BASE/config.toml"
 chown -R visao:visao "$BASE/data" "$BASE/models/whisper"; chmod 750 "$BASE/data"
@@ -111,7 +111,7 @@ echo "[7/9] modelo de linguagem (Ollama): $LLM_MODEL"
 if [ "$LLM_MODEL" != "-" ]; then
   command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
   systemctl enable --now ollama >/dev/null 2>&1 || true
-  for i in $(seq 1 30); do curl -fs http://127.0.0.1:11434/api/version >/dev/null && break; sleep 1; done
+  for _ in $(seq 1 30); do curl -fs http://127.0.0.1:11434/api/version >/dev/null && break; sleep 1; done
   ollama pull "$LLM_MODEL"
 fi
 
