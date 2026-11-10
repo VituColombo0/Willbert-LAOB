@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Abrir a areia
+Comment=Abre a topografia da caixa de areia no projetor
+Exec=/home/laob/SARndbox-rosto/areia-topografia
+Icon=applications-science
+Terminal=false

@@ -73,3 +73,11 @@ girar/espelhar e ajustar deformação, sombra e mistura com as cores de relevo.
 - Recorte do fundo: U²-Net de pessoas (`modelos/u2net_human_seg.onnx`, 176 MB, release v0.0.0 do
   projeto rembg) rodando no OpenCV do venv local, ~3 s. Baixar com:
   `wget -P modelos https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx`
+
+## Ao ligar e se não abrir
+
+- O lab2 tem login automático (GDM) e o autostart roda `areia-topografia`, que espera o Kinect
+  aparecer no USB (até 30 s), tenta abrir 3 vezes e registra em `~/SARndbox-rosto/inicio.log`.
+- Na Área de Trabalho: `SE A AREIA NÃO ABRIR.txt` (cópia de `SE-A-AREIA-NAO-ABRIR.txt`) e o atalho
+  `Abrir a areia.desktop` (de `abrir-a-areia.desktop`; precisa de `chmod +x` e
+  `gio set <arquivo> metadata::trusted true` para abrir com dois cliques).

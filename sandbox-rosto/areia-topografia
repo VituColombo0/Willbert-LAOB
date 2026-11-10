@@ -1,13 +1,40 @@
 #!/bin/bash
-# Volta a caixa de areia para a TOPOGRAFIA (o SARndbox original, o mesmo que abre ao ligar).
+# Volta a caixa de areia para a TOPOGRAFIA (o SARndbox original). É também o que roda ao ligar o PC
+# (~/.config/autostart/SARndbox.desktop): espera o Kinect aparecer e tenta de novo se não abrir.
 set -uo pipefail
 D=/home/laob/SARndbox-rosto
-"$D/sandbox.sh" original >/dev/null
+LOG=$D/inicio.log
+registra() { echo "$(date '+%F %T') $*" >> "$LOG"; }
+[ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 500 ] && tail -n 200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+
+# Kinect (Xbox NUI Camera 045e:02ae): ao ligar o PC ele pode demorar alguns segundos
+for _ in $(seq 1 30); do
+  lsusb -d 045e:02ae >/dev/null 2>&1 && break
+  sleep 1
+done
+lsusb -d 045e:02ae >/dev/null 2>&1 || { registra "Kinect não encontrado (USB)"; echo "Kinect não encontrado: confira o cabo USB e a fonte do Kinect"; }
+
 python3 - <<'PY'
 import json, os
 p = "/home/laob/SARndbox-rosto/estado.json"
-e = json.load(open(p)) if os.path.exists(p) else {}
+try:
+    e = json.load(open(p))
+except (OSError, ValueError):
+    e = {}
 e["modo"] = "original"
 json.dump(e, open(p + ".tmp", "w")); os.replace(p + ".tmp", p)
 PY
-[ "$("$D/sandbox.sh" estado)" = original ] && echo "Topografia no projetor." || { echo "a topografia não abriu (veja $D/sandbox.log)"; exit 1; }
+
+for tentativa in 1 2 3; do
+  "$D/sandbox.sh" original >/dev/null 2>&1
+  sleep 3
+  if [ "$("$D/sandbox.sh" estado)" = original ]; then
+    registra "topografia aberta (tentativa $tentativa)"
+    echo "Topografia no projetor."
+    exit 0
+  fi
+  registra "topografia não abriu (tentativa $tentativa)"
+  sleep 5
+done
+echo "A topografia não abriu depois de 3 tentativas. Veja: $LOG"
+exit 1
