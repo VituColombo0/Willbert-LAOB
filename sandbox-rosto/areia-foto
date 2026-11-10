@@ -1,0 +1,53 @@
+#!/bin/bash
+# Modo FOTO da caixa de areia: projeta uma pessoa (sem fundo) que se deforma com a areia.
+#   areia-foto                 mostra a última foto preparada
+#   areia-foto <arquivo>       recorta o fundo, prepara e mostra essa foto
+#   areia-foto camera          tira a foto pela câmera do laboratório (Willbert)
+#   areia-foto girar | espelhar  vira a foto 90° / espelha (se aparecer de lado para quem olha)
+# Para voltar à topografia: areia-topografia
+set -euo pipefail
+D=/home/laob/SARndbox-rosto
+PY=/opt/visao/venv/bin/python
+FOTOS=$D/fotos
+EST=$D/estado.json
+
+le() { python3 -c "import json,sys; e=json.load(open('$EST')) if __import__('os').path.exists('$EST') else {}; a={'zoom':0.03,'desloc':0.0,'mistura':0.0,'sombra':1.0}; a.update(e.get('ajuste',{})); print({'giro':e.get('giro',0),'espelho':int(bool(e.get('espelho',False))),'ajuste':' '.join(str(a[k]) for k in ('zoom','desloc','mistura','sombra'))}['$1'])"; }
+grava() { python3 - "$@" <<'PY'
+import json, os, sys
+p = "/home/laob/SARndbox-rosto/estado.json"
+e = json.load(open(p)) if os.path.exists(p) else {}
+for kv in sys.argv[1:]:
+    k, v = kv.split("=", 1)
+    e[k] = json.loads(v)
+json.dump(e, open(p + ".tmp", "w")); os.replace(p + ".tmp", p)
+PY
+}
+prepara() {
+  local args=("$1" --giro "$(le giro)")
+  [ "$(le espelho)" = 1 ] && args+=(--espelho)
+  echo "Recortando o fundo e preparando a foto (uns 5 s)..."
+  "$PY" "$D/rosto.py" "${args[@]}" 2>&1 | grep -v WARN
+}
+
+case "${1:-}" in
+  "") ;;
+  camera|câmera)
+    sudo -n /usr/local/sbin/willbert-controle foto >/dev/null || { echo "não consegui a foto da câmera"; exit 1; }
+    cp "$FOTOS/camera.jpg" "$FOTOS/enviada.jpg"; prepara "$FOTOS/enviada.jpg" ;;
+  girar)
+    grava "giro=$(( ($(le giro) + 90) % 360 ))"; [ -f "$FOTOS/enviada.jpg" ] && prepara "$FOTOS/enviada.jpg" ;;
+  espelhar)
+    if [ "$(le espelho)" = 1 ]; then grava "espelho=false"; else grava "espelho=true"; fi
+    [ -f "$FOTOS/enviada.jpg" ] && prepara "$FOTOS/enviada.jpg" ;;
+  -h|--help|ajuda) sed -n 2,8p "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  *)
+    [ -f "$1" ] || { echo "arquivo não encontrado: $1"; exit 1; }
+    mkdir -p "$FOTOS"; cp "$1" "$FOTOS/enviada.jpg"; prepara "$FOTOS/enviada.jpg" ;;
+esac
+
+[ -f "$FOTOS/rosto.png" ] || { echo "Ainda não há foto. Use: areia-foto <arquivo da foto>"; exit 1; }
+"$D/sandbox.sh" rosto >/dev/null || { echo "o modo foto não abriu; a topografia voltou"; exit 1; }
+"$D/sandbox.sh" cmd "rosto $FOTOS/rosto.png $(le giro) $(le espelho)" >/dev/null
+"$D/sandbox.sh" cmd "rostoAjuste $(le ajuste)" >/dev/null
+grava 'modo="rosto"'
+echo "Modo FOTO no projetor. Para voltar: areia-topografia"

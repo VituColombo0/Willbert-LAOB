@@ -1,0 +1,13 @@
+#!/bin/bash
+# Volta a caixa de areia para a TOPOGRAFIA (o SARndbox original, o mesmo que abre ao ligar).
+set -uo pipefail
+D=/home/laob/SARndbox-rosto
+"$D/sandbox.sh" original >/dev/null
+python3 - <<'PY'
+import json, os
+p = "/home/laob/SARndbox-rosto/estado.json"
+e = json.load(open(p)) if os.path.exists(p) else {}
+e["modo"] = "original"
+json.dump(e, open(p + ".tmp", "w")); os.replace(p + ".tmp", p)
+PY
+[ "$("$D/sandbox.sh" estado)" = original ] && echo "Topografia no projetor." || { echo "a topografia não abriu (veja $D/sandbox.log)"; exit 1; }

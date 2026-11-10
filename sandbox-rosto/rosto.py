@@ -3,11 +3,13 @@
   python rosto.py <foto.jpg> [--giro 0] [--espelho] [--sem-recorte]
 
 Gera em fotos/:
-  rosto.png  o rosto recortado (retrato 3:4), contraste reforçado para projetar na areia,
-             bordas escurecendo em elipse
+  rosto.png  o rosto recortado (retrato 3:4), sem fundo (preto = projetor apagado),
+             contraste reforçado para projetar na areia
   rosto.dem  relevo-alvo para o modo Esculpir (altura em cm sobre a caixa de areia)
   teste.png  (com --teste) uma imagem de orientação: seta para CIMA e cantos coloridos
 Usa o detector de rosto do Willbert (YuNet). Sem rosto achado, usa o centro da foto.
+O fundo sai com o U²-Net de pessoas (modelos/u2net_human_seg.onnx, do projeto rembg) pelo OpenCV;
+foto PNG que já vem transparente usa a própria transparência. --com-fundo mantém o fundo.
 """
 import argparse
 import os
@@ -21,6 +23,7 @@ AQUI = os.path.dirname(os.path.abspath(__file__))
 FOTOS = os.path.join(AQUI, "fotos")
 BOX = "/root/etc/SARndbox-2.8/BoxLayout.txt"
 YUNET = "/opt/visao/models/face_detection_yunet_2023mar.onnx"
+U2NET = os.path.join(AQUI, "modelos", "u2net_human_seg.onnx")
 SAIDA_W, SAIDA_H = 600, 800
 
 
@@ -69,7 +72,7 @@ def acha_rosto(img):
     return [v / esc for v in f[:4]]
 
 
-def recorta(img, rosto):
+def recorta(img, rosto, borda=cv2.BORDER_REPLICATE):
     h, w = img.shape[:2]
     if rosto is None:
         cx, cy, ch = w / 2, h / 2, min(h, w * 4 / 3)
@@ -80,17 +83,39 @@ def recorta(img, rosto):
     cw = ch * 3 / 4
     M = np.float32([[SAIDA_W / cw, 0, SAIDA_W / 2 - cx * SAIDA_W / cw],
                     [0, SAIDA_H / ch, SAIDA_H / 2 - cy * SAIDA_H / ch]])
-    return cv2.warpAffine(img, M, (SAIDA_W, SAIDA_H), flags=cv2.INTER_AREA, borderMode=cv2.BORDER_REPLICATE)
+    return cv2.warpAffine(img, M, (SAIDA_W, SAIDA_H), flags=cv2.INTER_AREA, borderMode=borda)
 
 
-def realca(img):
-    """Projetado na areia o contraste cai muito: reforça contraste e cor, escurece as bordas."""
+def mascara_pessoa(img):
+    """0..1 onde há pessoa (U²-Net de pessoas, ~3 s na CPU do lab2)."""
+    net = cv2.dnn.readNetFromONNX(U2NET)
+    rgb = cv2.cvtColor(cv2.resize(img, (320, 320), interpolation=cv2.INTER_LANCZOS4), cv2.COLOR_BGR2RGB)
+    rgb = rgb.astype(np.float32) / max(float(rgb.max()), 1.0)
+    rgb = (rgb - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
+    net.setInput(rgb.transpose(2, 0, 1)[None].astype(np.float32))
+    m = net.forward()[0, 0]
+    m = (m - m.min()) / max(float(m.max() - m.min()), 1e-6)
+    return cv2.resize(m, (img.shape[1], img.shape[0]), interpolation=cv2.INTER_LINEAR)
+
+
+def tira_fundo(img, mascara):
+    """Fundo preto, borda suave (sem serrilhado nem halo claro)."""
+    m = np.clip((mascara - 0.15) / 0.7, 0, 1).astype(np.float32)
+    m = cv2.erode(m, np.ones((3, 3), np.uint8))
+    m = cv2.GaussianBlur(m, (0, 0), 1.2)
+    return (img * m[..., None]).astype(np.uint8), m
+
+
+def realca(img, vinheta=True):
+    """Projetado na areia o contraste cai muito: reforça contraste e cor (e escurece as bordas)."""
     lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     lab[..., 0] = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(6, 6)).apply(lab[..., 0])
     img = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV).astype(np.float32)
     hsv[..., 1] = np.clip(hsv[..., 1] * 1.25, 0, 255)
     img = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
+    if not vinheta:
+        return img
     yy, xx = np.mgrid[0:SAIDA_H, 0:SAIDA_W]
     r = np.sqrt(((xx - SAIDA_W / 2) / (SAIDA_W * 0.5)) ** 2 + ((yy - SAIDA_H / 2) / (SAIDA_H * 0.5)) ** 2)
     vinheta = np.clip(1.25 - r, 0, 1) ** 0.7
@@ -152,6 +177,7 @@ def main():
     ap.add_argument("--espelho", action="store_true")
     ap.add_argument("--sem-recorte", action="store_true")
     ap.add_argument("--teste", action="store_true")
+    ap.add_argument("--com-fundo", action="store_true", help="não recorta o fundo")
     a = ap.parse_args()
     os.makedirs(FOTOS, exist_ok=True)
     if a.teste:
@@ -160,15 +186,34 @@ def main():
         grava_dem(np.zeros((SAIDA_H, SAIDA_W), np.float32), a.giro, a.espelho, os.path.join(FOTOS, "teste.dem"))
         print(os.path.join(FOTOS, "teste.png"))
         return
-    img = cv2.imread(a.foto)
-    if img is None:
+    bruta = cv2.imread(a.foto, cv2.IMREAD_UNCHANGED)
+    if bruta is None:
         sys.exit(f"não consegui abrir {a.foto}")
+    if bruta.ndim == 2:
+        bruta = cv2.cvtColor(bruta, cv2.COLOR_GRAY2BGR)
+    alfa = None
+    if bruta.shape[2] == 4:
+        alfa = bruta[..., 3].astype(np.float32) / 255
+        if alfa.min() > 0.98:  # canal alfa sem transparência de verdade
+            alfa = None
+        bruta = bruta[..., :3]
+    img = np.ascontiguousarray(bruta)
     rosto = None if a.sem_recorte else acha_rosto(img)
     if not a.sem_recorte and rosto is None:
         print("aviso: não achei um rosto; usando o centro da foto", file=sys.stderr)
-    out = realca(recorta(img, rosto))
+    if a.com_fundo:
+        out = realca(recorta(img, rosto))
+        pessoa = np.ones(out.shape[:2], np.float32)
+    else:
+        if alfa is None:
+            if not os.path.exists(U2NET):
+                sys.exit(f"falta o modelo de recorte {U2NET}")
+            alfa = mascara_pessoa(img)
+        foto = realca(recorta(img, rosto), vinheta=False)
+        alfa = recorta(alfa, rosto, borda=cv2.BORDER_CONSTANT)
+        out, pessoa = tira_fundo(foto, alfa)
     cv2.imwrite(os.path.join(FOTOS, "rosto.png"), out)
-    grava_dem(relevo(out), a.giro, a.espelho, os.path.join(FOTOS, "rosto.dem"))
+    grava_dem(relevo(out) * (pessoa > 0.5), a.giro, a.espelho, os.path.join(FOTOS, "rosto.dem"))
     print("rosto achado" if rosto is not None else "sem rosto", os.path.join(FOTOS, "rosto.png"))
 
 

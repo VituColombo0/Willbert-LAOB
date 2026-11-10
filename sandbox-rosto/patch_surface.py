@@ -51,19 +51,37 @@ if "FaceImage" not in c:
 					fragmentVaryings+="\\
 						varying vec3 faceTexCoord;\\n";
 					fragmentMain+="\\
-						/* Modo Rosto: a areia alta amplia a foto (lente) e o relevo faz sombra: */\\n\\
+						/* Modo Foto: a areia alta amplia a foto (lente) e o relevo faz sombra: */\\n\\
 						float faceH=faceTexCoord.z-faceReference;\\n\\
 						vec2 faceUv=vec2(0.5)+(faceTexCoord.xy-vec2(0.5))*(1.0-clamp(faceParams.x*faceH,-0.8,0.8));\\n\\
 						faceUv.x+=faceParams.y*faceH;\\n\\
+						vec4 faceOut=vec4(0.0,0.0,0.0,1.0); // fora da foto: preto (projetor apagado)\\n\\
 						if(faceUv.x>=0.0&&faceUv.x<=1.0&&faceUv.y>=0.0&&faceUv.y<=1.0)\\n\\
 							{\\n\\
 							vec3 faceN=normalize(vec3(-dFdx(faceTexCoord.z)*faceParams.w*8.0,-dFdy(faceTexCoord.z)*faceParams.w*8.0,1.0));\\n\\
 							float faceShade=clamp(0.45+0.75*dot(faceN,normalize(vec3(-0.5,0.5,0.7))),0.25,1.25);\\n\\
 							vec4 faceColor=texture2D(faceSampler,faceUv);\\n\\
-							baseColor=mix(vec4(faceColor.rgb*faceShade,1.0),baseColor,faceParams.z);\\n\\
+							faceOut=vec4(faceColor.rgb*faceShade,1.0);\\n\\
 							}\\n\\
 						\\n";
 					}
+""")
+    # no modo Foto a saída é só a foto (fundo preto), sem cores de relevo, curvas de nível nem água;
+    # faceParams.z (mistura) traz o relevo de volta se alguém quiser
+    c = rep(c, """		fragmentMain+="\\
+			/* Assign the final color to the fragment: */\\n\\
+			gl_FragColor=baseColor;\\n\\
+			}\\n";
+""", """		if(fragmentMain.find("faceOut")!=std::string::npos)
+			fragmentMain+="\\
+			/* Modo Foto: só a foto; o relevo só entra pela mistura: */\\n\\
+			gl_FragColor=mix(faceOut,baseColor,faceParams.z);\\n\\
+			}\\n";
+		else
+		fragmentMain+="\\
+			/* Assign the final color to the fragment: */\\n\\
+			gl_FragColor=baseColor;\\n\\
+			}\\n";
 """)
     # localização dos uniforms (mesma ordem do envio)
     c = rep(c, """			*(ulPtr++)=glGetUniformLocationARB(result,"heightColorMapSampler");

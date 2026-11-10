@@ -31,7 +31,7 @@ FaceImage::FaceImage(const char* imageFileName)
 		faceTransformMatrix[i]=(i%5==0)?1.0f:0.0f;
 	params[0]=0.03f; // 10 cm de morro = 30% de ampliação
 	params[1]=0.0f;
-	params[2]=0.15f;
+	params[2]=0.0f; // 0 = só a foto, sem as cores de relevo
 	params[3]=1.0f;
 	
 	/* Só registra no OpenGL depois que a foto foi lida: */

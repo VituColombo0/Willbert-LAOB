@@ -44,3 +44,20 @@ girar/espelhar e ajustar deformação, sombra e mistura com as cores de relevo.
 - A calibração do lab2 marca uma caixa maior que a imagem do projetor; a foto é encaixada só na
   parte iluminada (cantos da imagem do projetor levados ao plano base, em `Sandbox.cpp` e `rosto.py`).
   Hoje: x -34,5..24,8 cm, y -28,8..13,1 cm (cerca de 59 × 42 cm).
+
+## Topografia ao ligar, foto por comando
+
+- Ao ligar o lab2, o autostart (`~/.config/autostart/SARndbox.desktop`) roda `areia-topografia`:
+  o SARndbox original em tela cheia no projetor. O atalho antigo ficou em
+  `~/SARndbox-rosto/SARndbox.desktop.original` (para desfazer, copie-o de volta).
+- No terminal (os dois ficam em `~/.local/bin`):
+  - `areia-foto <arquivo>`: recorta o fundo da foto, prepara e projeta só a pessoa (fundo preto).
+  - `areia-foto`: projeta de novo a última foto. `areia-foto camera`: foto pela câmera do laboratório.
+  - `areia-foto girar` / `areia-foto espelhar`: se a pessoa aparecer de lado ou invertida.
+  - `areia-topografia`: volta à topografia.
+- No modo foto não aparecem cores de relevo, curvas de nível nem água: só a foto, que amplia onde a
+  areia está mais alta e ganha sombra do relevo. No painel, "mistura" traz o relevo de volta, e
+  deformação 0 + sombra 0 projeta a foto sem efeito nenhum.
+- Recorte do fundo: U²-Net de pessoas (`modelos/u2net_human_seg.onnx`, 176 MB, release v0.0.0 do
+  projeto rembg) rodando no OpenCV do Willbert, ~3 s. Baixar com:
+  `wget -P modelos https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx`

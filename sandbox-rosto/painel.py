@@ -15,7 +15,7 @@ ESTADO = os.path.join(AQUI, "estado.json")
 PY = "/opt/visao/venv/bin/python"
 SANDBOX = os.path.join(AQUI, "sandbox.sh")
 PADRAO = {"modo": "relevo", "giro": 0, "espelho": False,
-          "ajuste": {"zoom": 0.03, "desloc": 0.0, "mistura": 0.15, "sombra": 1.0}}
+          "ajuste": {"zoom": 0.03, "desloc": 0.0, "mistura": 0.0, "sombra": 1.0}}
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 trava = threading.Lock()
