@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
 import signal
 import threading
@@ -136,7 +137,8 @@ class Detector:
             log.error("conversa desligada: falta dependência (%s)", e)
             return
         llm = LLM(cfg.llm, cfg.assistant.name)
-        self.assistente = Assistente(cfg, self.speaker, self.fatos, llm)
+        self.assistente = Assistente(cfg, self.speaker, self.fatos, llm,
+                                     acoes={"areia_rosto": self.foto_para_areia})
         self.ouvido = Ouvido(cfg.assistant, cfg.stt, self.speaker, self.assistente.ouviu)
         self.ouvido.start()
         threading.Thread(target=llm.warmup, daemon=True, name="llm-warmup").start()
@@ -190,6 +192,51 @@ class Detector:
                 "pessoa_falando": names.get(falando.member_id) if falando else None,
                 "presentes": presentes, "hoje": hoje, "ultima_vez": ultima,
                 "saidas_hoje": saidas, "ontem": ontem, "dias_semana": semana, "visitantes_hoje": visitantes}
+
+    # ------------------------------------------------- caixa de areia (Projetor-LAOB)
+    def foto_para_areia(self, nome):
+        """'Willbert, grave o meu rosto': depois do "Sorria!", fotografa quem está mais perto da
+        câmera e manda para o painel da caixa de areia, que recorta e projeta. Volta na hora;
+        o resto roda em segundo plano para não travar a conversa nem o reconhecimento."""
+        url = str(self.cfg.assistant.get("areia_url") or "")
+        if not url:
+            return False
+        threading.Thread(target=self._foto_para_areia, args=(nome, url), daemon=True, name="foto-areia").start()
+        return True
+
+    def _foto_para_areia(self, nome, url):
+        import urllib.request
+        t0 = time.time()
+        time.sleep(1.0)  # o "Sorria!" entra na fila de fala
+        while time.time() - t0 < 15 and (self.speaker.playing or not self.speaker.q.empty()):
+            time.sleep(0.1)
+        time.sleep(0.6)  # a pessoa se ajeita depois de ouvir
+        frame, _, _ = self.src.latest()
+        if frame is None:
+            log.warning("foto para a areia: sem imagem da câmera")
+            return
+        agora = time.time()
+        vistos = [t for t in list(self.tracker.tracks.values()) if agora - t.last_ts < 4.0]
+        recorte = frame
+        if vistos:  # um recorte folgado em volta do rosto mais perto; o Projetor-LAOB acerta o enquadramento
+            x, y, w, h = max(vistos, key=lambda t: t.face.w).face.box
+            cx, cy, lado = x + w / 2, y + h / 2, max(w, h)
+            x0, x1 = int(max(0, cx - 1.6 * lado)), int(min(frame.shape[1], cx + 1.6 * lado))
+            y0, y1 = int(max(0, cy - 1.5 * lado)), int(min(frame.shape[0], cy + 2.3 * lado))
+            recorte = frame[y0:y1, x0:x1]
+        ok, jpg = cv2.imencode(".jpg", recorte, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        if not ok:
+            return
+        nome_arq = re.sub(r"[^A-Za-z0-9_-]+", "-", f"willbert-{nome or 'rosto'}") + ".jpg"
+        corpo, borda = multipart_foto(jpg.tobytes(), nome_arq)
+        req = urllib.request.Request(url, data=corpo, method="POST",
+                                     headers={"Content-Type": f"multipart/form-data; boundary={borda}"})
+        try:
+            with urllib.request.urlopen(req, timeout=90) as r:
+                log.info("foto de %s enviada para a areia: %s", nome or "alguém", r.read(200).decode(errors="replace"))
+        except Exception as e:
+            log.warning("não consegui mandar a foto para a areia (%s)", e)
+            self.speaker.speak_now("Não consegui colocar a foto na areia. A caixa de areia está ligada?")
 
     # ------------------------------------------------------------------ loop
     def every(self, name, period):
@@ -1022,3 +1069,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def multipart_foto(dados, nome_arquivo):
+    """Corpo multipart/form-data com o campo "foto" (o que o painel da caixa de areia espera)."""
+    import secrets
+    borda = "willbert" + secrets.token_hex(12)
+    corpo = (f"--{borda}\r\nContent-Disposition: form-data; name=\"foto\"; filename=\"{nome_arquivo}\"\r\n"
+             "Content-Type: image/jpeg\r\n\r\n").encode() + dados + f"\r\n--{borda}--\r\n".encode()
+    return corpo, borda

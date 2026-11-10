@@ -130,6 +130,8 @@ DEFAULTS = {
     "assistant": {
         "enabled": False,          # o perfil liga no PC
         "name": "Willbert",
+        # "Willbert, grave o meu rosto": a foto vai para o painel da caixa de areia (Projetor-LAOB)
+        "areia_url": "http://127.0.0.1:8090/foto",
         # como o Whisper costuma escrever o nome (comparação aproximada também é feita)
         "wake_words": ["willbert", "wilbert", "uilbert", "wilber", "uilber", "wilbur", "gilbert",
                        "vilbert", "will bert", "uil bert"],

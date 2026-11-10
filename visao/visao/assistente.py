@@ -68,8 +68,9 @@ def acha_nome(texto_norm, palavras, limiar=0.84):
 
 
 class Assistente:
-    def __init__(self, cfg, speaker, fatos_fn, llm=None):
+    def __init__(self, cfg, speaker, fatos_fn, llm=None, acoes=None):
         self.cfg, self.acfg = cfg, cfg.assistant
+        self.acoes = acoes or {}  # ex.: {"areia_rosto": fn(nome) -> bool}, ligadas pelo detector
         self.speaker, self.fatos_fn, self.llm = speaker, fatos_fn, llm
         self.nome = self.acfg.name
         self.follow_until = 0.0
@@ -111,7 +112,7 @@ class Assistente:
     # --------------------------------------------------------------- respostas
     # Ordem importa: as mais específicas primeiro. Tudo aqui é local e instantâneo (regex sobre o
     # texto já sem acento); só o que não casar com nenhuma regra vai para o LLM.
-    REGRAS = ("_encerrar", "_repete", "_saudacao", "_tudo_bem", "_quem_e_voce", "_conta",
+    REGRAS = ("_encerrar", "_areia_rosto", "_repete", "_saudacao", "_tudo_bem", "_quem_e_voce", "_conta",
               "_dia_semana", "_mes_ano", "_hora", "_data", "_quem_sou", "_primeiro_ultimo", "_ontem",
               "_quem_saiu", "_quem_esta", "_quantos", "_quem_chegou", "_visitantes", "_sobre_membro",
               "_piada", "_ajuda", "_obrigado")
@@ -200,6 +201,22 @@ class Assistente:
         else:
             r = a + b if op == "mais" else a - b if op == "menos" else a * b
         return f"Dá {str(r).replace('.', ',')}."
+
+    # --- ações
+    def _areia_rosto(self, p, f):
+        """'Willbert, grave o meu rosto' -> foto de quem está falando, projetada na caixa de areia."""
+        if not re.search(r"\b(grav[ae]|grava|tira|tire|bate|bata|faz|faca|coloca|coloque|poe|ponha|mostra|mostre)\b"
+                         r".*\b(meu rosto|minha cara|minha foto|uma foto|foto minha|na areia)\b", p):
+            return None
+        quem = f.get("pessoa_falando")
+        acao = self.acoes.get("areia_rosto")
+        if acao is None:
+            return "A caixa de areia não está ligada a mim agora."
+        if not f.get("na_camera"):
+            return "Não estou te vendo. Fica de frente para a câmera e pede de novo."
+        if not acao(quem):
+            return "Não consegui mandar para a areia agora. Tenta de novo daqui a pouco."
+        return f"Sorria{', ' + quem if quem else ''}! Em alguns segundos você aparece na areia."
 
     # --- tempo
     def _dia_semana(self, p, f):
@@ -339,7 +356,7 @@ class Assistente:
     def _ajuda(self, p, f):
         if re.search(r"\bo que (voce|vc) (faz|sabe|pode)|\b(me ajuda|ajuda)\b", p):
             return ("Eu sei a hora e a data, quem está, quem chegou e quem saiu, quantas vezes alguém veio "
-                    "na semana, faço contas e conto piadas. Para o resto, eu penso um pouco.")
+                    "na semana, faço contas, conto piadas e gravo o seu rosto na areia. Para o resto, eu penso um pouco.")
 
     def _obrigado(self, p, f):
         if re.fullmatch(r"(muito )?(obrigad[oa]|valeu|brigad[oa])( (willbert|wilbert))?", p):

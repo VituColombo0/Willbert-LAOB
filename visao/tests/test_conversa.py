@@ -105,6 +105,32 @@ for pergunta, esperado in casos:
     r = a.ouviu(pergunta, ts=time.time())
     check(f"{pergunta!r}", r == esperado, f"-> {r!r}")
 
+# --- "Willbert, grave o meu rosto": foto de quem fala vai para a caixa de areia
+pedidos = []
+ar = Assistente(cfg, sp, fatos, LLM(cfg.llm), acoes={"areia_rosto": lambda n: pedidos.append(n) or True})
+for frase in ("Willbert, grave o meu rosto", "Willbert, tira uma foto minha", "Willbert, me coloca na areia",
+              "Willbert, grava meu rosto na areia"):
+    ar.follow_until = 0
+    r = ar.ouviu(frase)
+    check(f"{frase!r} -> foto para a areia", r == "Sorria, Victor! Em alguns segundos você aparece na areia.",
+          f"-> {r!r}")
+check("a foto é de quem está falando", pedidos == ["Victor"] * 4, f"-> {pedidos}")
+check("sem a caixa de areia ligada, avisa", a.ouviu("Willbert, grave o meu rosto") ==
+      "A caixa de areia não está ligada a mim agora.")
+f_sem = dict(fatos(), na_camera=[], pessoa_falando=None)
+ar2 = Assistente(cfg, sp, lambda: f_sem, LLM(cfg.llm), acoes={"areia_rosto": lambda n: True})
+check("ninguém na câmera: pede para olhar", ar2.ouviu("Willbert, grave o meu rosto").startswith("Não estou te vendo"))
+ar3 = Assistente(cfg, sp, fatos, LLM(cfg.llm), acoes={"areia_rosto": lambda n: False})
+check("falha ao mandar: avisa", ar3.ouviu("Willbert, grave o meu rosto").startswith("Não consegui mandar"))
+from email.parser import BytesParser
+from visao.detector import multipart_foto
+corpo, borda = multipart_foto(b"\xff\xd8JPEG", "willbert-Victor.jpg")
+msg = BytesParser().parsebytes(f"Content-Type: multipart/form-data; boundary={borda}\r\n\r\n".encode() + corpo)
+parte = msg.get_payload()[0]
+check("corpo multipart com o campo foto", parte.get_param("name", header="content-disposition") == "foto"
+      and parte.get_filename() == "willbert-Victor.jpg" and parte.get_payload(decode=True) == b"\xff\xd8JPEG")
+a.follow_until = 0
+
 # --- conversa de outras pessoas é ignorada; continuação logo depois é aceita
 a.follow_until = 0
 check("ignora conversa sem o nome", a.ouviu("passa o café aí", ts=time.time()) is None)
