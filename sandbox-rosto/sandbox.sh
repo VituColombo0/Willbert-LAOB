@@ -10,6 +10,8 @@ ORIG=/home/laob/SARndbox-2.8/bin/SARndbox
 ROSTO=/home/laob/SARndbox-rosto/bin/SARndbox
 FIFO=/home/laob/SARndbox-rosto/controle.fifo
 LOG=/home/laob/SARndbox-rosto/sandbox.log
+# janela em tela cheia no projetor (sem isso ela abre no monitor)
+TELA=(-mergeConfig /home/laob/SARndbox-rosto/projetor.cfg)
 export DISPLAY=:0 XAUTHORITY=/run/user/1000/gdm/Xauthority XDG_RUNTIME_DIR=/run/user/1000 \
        DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus HOME=/home/laob
 
@@ -26,7 +28,7 @@ parar() {
 }
 
 iniciar_original() {
-  ( cd /home/laob && exec setsid nohup "$ORIG" -uhm -fpv ) >/dev/null 2>&1 < /dev/null &
+  ( cd /home/laob && exec setsid nohup "$ORIG" "${TELA[@]}" -uhm -fpv ) >/dev/null 2>&1 < /dev/null &
 }
 
 case "${1:-estado}" in
@@ -38,7 +40,7 @@ case "${1:-estado}" in
     [ "$(qual)" = rosto ] && { echo rosto; exit 0; }
     [ -p "$FIFO" ] || { rm -f "$FIFO"; mkfifo -m 600 "$FIFO"; }
     parar
-    ( cd /home/laob && exec setsid nohup "$ROSTO" -uhm -fpv -cp "$FIFO" ) > "$LOG" 2>&1 < /dev/null &
+    ( cd /home/laob && exec setsid nohup "$ROSTO" "${TELA[@]}" -uhm -fpv -cp "$FIFO" ) > "$LOG" 2>&1 < /dev/null &
     sleep 8
     if [ "$(qual)" != rosto ]; then
       echo "a versão Rosto não subiu (veja $LOG); voltando ao original"

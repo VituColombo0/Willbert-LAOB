@@ -37,7 +37,21 @@ def caixa_cm():
     y = np.cross(n, x)
     c = ((cs[0] + cs[1]) / 2 + (cs[2] + cs[3]) / 2) / 2
     b = np.array([[(p - c) @ x, (p - c) @ y] for p in cs])
-    return b.min(0), b.max(0)
+    bmin, bmax = b.min(0), b.max(0)
+    # só a parte que o projetor ilumina (igual ao Sandbox.cpp): cantos da imagem até o plano base
+    pm = os.path.join(os.path.dirname(BOX), "ProjectorMatrix.dat")
+    if os.path.exists(pm):
+        inv = np.linalg.inv(np.array(struct.unpack("<16d", open(pm, "rb").read()[:128])).reshape(4, 4))
+        pts = []
+        for nx, ny in ((-1, -1), (1, -1), (-1, 1), (1, 1)):
+            p0, p1 = (inv @ np.array([nx, ny, z, 1.0]) for z in (-1.0, 1.0))
+            p0, p1 = p0[:3] / p0[3], p1[:3] / p1[3]
+            d0, d1 = p0 @ n - off, p1 @ n - off
+            p = p0 + (p1 - p0) * (d0 / (d0 - d1))
+            pts.append([(p - c) @ x, (p - c) @ y])
+        xs, ys = np.sort(np.array(pts), axis=0).T
+        bmin = np.maximum(bmin, [xs[1], ys[1]]); bmax = np.minimum(bmax, [xs[2], ys[2]])
+    return bmin, bmax
 
 
 def acha_rosto(img):

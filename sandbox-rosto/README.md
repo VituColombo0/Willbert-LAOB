@@ -18,7 +18,7 @@ Cópia do AR Sandbox 2.8 (`~/SARndbox-rosto` no lab2) com dois modos novos. O or
 ## Montar no lab2
     cp -a ~/SARndbox-2.8 ~/SARndbox-rosto && cd ~/SARndbox-rosto
     cp /root/etc/SARndbox-2.8/* etc/SARndbox-2.8/
-    cp <este diretório>/{FaceImage.h,FaceImage.cpp,patch_*.py,rosto.py,sandbox.sh} .
+    cp <este diretório>/{FaceImage.h,FaceImage.cpp,patch_*.py,rosto.py,sandbox.sh,projetor.cfg} .
     python3 patch_surface.py && python3 patch_sandbox.py
     make INSTALLDIR=$HOME/SARndbox-rosto
 
@@ -36,3 +36,11 @@ girar/espelhar e ajustar deformação, sombra e mistura com as cores de relevo.
     ./sandbox.sh cmd "esculpir /home/laob/SARndbox-rosto/fotos/rosto.dem"
     ./sandbox.sh cmd "relevo"
     ./sandbox.sh original
+
+## Projetor
+
+- `sandbox.sh` abre o SARndbox (as duas versões) com `-mergeConfig projetor.cfg`: a janela já sai
+  em tela cheia no projetor (HDMI-0). Sem isso ela abre no monitor.
+- A calibração do lab2 marca uma caixa maior que a imagem do projetor; a foto é encaixada só na
+  parte iluminada (cantos da imagem do projetor levados ao plano base, em `Sandbox.cpp` e `rosto.py`).
+  Hoje: x -34,5..24,8 cm, y -28,8..13,1 cm (cerca de 59 × 42 cm).

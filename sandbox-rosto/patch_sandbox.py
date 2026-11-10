@@ -54,6 +54,39 @@ if "FaceImage" not in c:
 			faceBoxMax[j]=Math::max(faceBoxMax[j],double(bc[j]));
 			}
 		}
+	
+	/* Só a parte da caixa que o projetor ilumina: a caixa calibrada pode ser maior que a imagem
+	   projetada. Cada canto da imagem do projetor é levado até o plano base: */
+	for(std::vector<RenderSettings>::iterator rsIt=renderSettings.begin();rsIt!=renderSettings.end();++rsIt)
+		if(rsIt->fixProjectorView&&rsIt->projectorTransformValid)
+			{
+			PTransform inv=Geometry::invert(rsIt->projectorTransform);
+			double xs[4],ys[4];
+			for(int i=0;i<4;++i)
+				{
+				double nx=(i&1)?1.0:-1.0,ny=(i&2)?1.0:-1.0;
+				PTransform::Point p0=inv.transform(PTransform::Point(nx,ny,-1.0));
+				PTransform::Point p1=inv.transform(PTransform::Point(nx,ny,1.0));
+				double d0=basePlane.calcDistance(p0),d1=basePlane.calcDistance(p1);
+				PTransform::Point p=p0+(p1-p0)*(d0/(d0-d1));
+				ONTransform::Point bc=boxTransform.transform(p);
+				xs[i]=bc[0];
+				ys[i]=bc[1];
+				}
+			for(int i=0;i<4;++i)
+				for(int j=i+1;j<4;++j)
+					{
+					if(xs[j]<xs[i]) std::swap(xs[i],xs[j]);
+					if(ys[j]<ys[i]) std::swap(ys[i],ys[j]);
+					}
+			/* Retângulo de dentro (o quadrilátero iluminado pode estar meio torto): */
+			faceBoxMin[0]=Math::max(faceBoxMin[0],xs[1]);
+			faceBoxMax[0]=Math::min(faceBoxMax[0],xs[2]);
+			faceBoxMin[1]=Math::max(faceBoxMin[1],ys[1]);
+			faceBoxMax[1]=Math::min(faceBoxMax[1],ys[2]);
+			std::cout<<"Modo Rosto: área iluminada x "<<faceBoxMin[0]<<".."<<faceBoxMax[0]<<" y "<<faceBoxMin[1]<<".."<<faceBoxMax[1]<<" cm"<<std::endl;
+			break;
+			}
 """)
     c = rep(c, """				else
 					std::cerr<<"Unrecognized control pipe command "<<tokens[0]<<std::endl;""", """				else if(isToken(tokens[0],"rosto"))
