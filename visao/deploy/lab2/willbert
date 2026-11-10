@@ -1,0 +1,8 @@
+#!/bin/sh
+# Liga, desliga e mostra o Willbert (atalho do willbert-controle, liberado sem senha).
+#   willbert ligar | willbert desligar | willbert estado | willbert testar-camera
+case "${1:-estado}" in
+  ligar|desligar|estado|testar-camera) exec sudo -n /usr/local/sbin/willbert-controle "$1" ;;
+  ajuda|-h|--help) sed -n 2,3p "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "uso: willbert ligar | desligar | estado | testar-camera"; exit 2 ;;
+esac

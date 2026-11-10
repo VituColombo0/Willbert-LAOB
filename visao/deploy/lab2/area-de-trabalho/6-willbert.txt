@@ -1,0 +1,61 @@
+WILLBERT - O ASSISTENTE DO LABORATÓRIO
+======================================
+
+O Willbert reconhece quem chega pela câmera, cumprimenta pelo nome,
+anota quem chegou e quem saiu, e conversa quando é chamado.
+Ele fica DESLIGADO até alguém ligar.
+
+
+LIGAR E DESLIGAR
+----------------
+1. Abra o Terminal: aperte Ctrl + Alt + T
+2. Digite o comando e aperte Enter:
+
+    willbert ligar          liga (leva uns 30 segundos para ficar pronto)
+    willbert desligar       desliga
+    willbert estado         mostra se está ligado
+
+
+COMO CONVERSAR
+--------------
+Fale perto da câmera, começando pelo nome dele: "Willbert, ..."
+Depois que ele responde, dá para continuar uns 10 segundos sem repetir
+o nome. Para encerrar: "tchau".
+
+  Perguntas que ele responde na hora:
+    "Willbert, que horas são?"            "Willbert, que dia é hoje?"
+    "Willbert, quem está aqui?"           "Willbert, quem chegou hoje?"
+    "Willbert, quem saiu?"                "Willbert, quem chegou primeiro?"
+    "Willbert, o Mario veio hoje?"        "Willbert, que horas o Lucas chegou?"
+    "Willbert, o Gazziro já foi embora?"  "Willbert, quem veio ontem?"
+    "Willbert, quantas vezes o Victor veio essa semana?"
+    "Willbert, apareceu algum visitante hoje?"
+    "Willbert, quanto é 7 vezes 8?"       "Willbert, conta uma piada"
+    "Willbert, repete"                     "Willbert, o que você sabe fazer?"
+  Outras perguntas ele pensa um pouco antes de responder (alguns segundos).
+
+
+FOTO NA CAIXA DE AREIA
+----------------------
+Olhe para a câmera e diga:
+    "Willbert, grave o meu rosto"
+Ele fala "Sorria!", tira a foto e em uns 15 segundos você aparece na areia.
+(Para voltar a areia ao normal: areia-topografia)
+
+
+SITE DO WILLBERT (cadastro de membros e histórico)
+--------------------------------------------------
+  No laboratório: http://192.168.0.139:8080
+  De fora (com Tailscale): http://100.114.194.28:8080
+  Usuário e senha: com o Victor.
+  Lá dá para cadastrar membros (com fotos ou pela câmera) e ver quem
+  chegou e saiu em cada dia.
+
+
+SE ALGO DER ERRADO
+------------------
+- Ele não responde: confira com  willbert estado  e, se estiver
+  desligado, rode  willbert ligar
+- Ele não reconhece alguém: a pessoa precisa estar cadastrada no site.
+- A câmera parou: rode  willbert testar-camera  UMA vez só
+  (a câmera bloqueia o acesso se testar várias vezes seguidas).
