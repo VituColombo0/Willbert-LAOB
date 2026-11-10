@@ -1,18 +1,20 @@
 """Painel do celular para o SARndbox (modo Rosto). Só responde em 127.0.0.1 e no IP do
 Tailscale do lab2: quem chega aqui já é um aparelho do Victor.
-    /opt/visao/venv/bin/python painel.py
+    ~/SARndbox-rosto/venv/bin/python painel.py
 """
 import json
 import os
 import subprocess
 import threading
+import time
 
 from flask import Flask, jsonify, request, send_file
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 FOTOS = os.path.join(AQUI, "fotos")
 ESTADO = os.path.join(AQUI, "estado.json")
-PY = "/opt/visao/venv/bin/python"
+PY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "venv", "bin", "python")
+AREIA = os.path.expanduser("~/Pictures/Areia")  # a mesma pasta do comando areia-foto
 SANDBOX = os.path.join(AQUI, "sandbox.sh")
 PADRAO = {"modo": "relevo", "giro": 0, "espelho": False,
           "ajuste": {"zoom": 0.03, "desloc": 0.0, "mistura": 0.0, "sombra": 1.0}}
@@ -100,8 +102,9 @@ def foto():
     with trava:
         e = estado()
         if "foto" in request.files and request.files["foto"].filename:
-            os.makedirs(FOTOS, exist_ok=True)
-            destino = os.path.join(FOTOS, "enviada.jpg")
+            os.makedirs(AREIA, exist_ok=True)
+            ext = os.path.splitext(request.files["foto"].filename)[1].lower() or ".jpg"
+            destino = os.path.join(AREIA, time.strftime("celular-%Y-%m-%d-%H%M%S") + ext)
             request.files["foto"].save(destino)
         else:  # câmera do laboratório (Tapo), pelo comando liberado do Willbert
             rc, out = run("sudo", "-n", "/usr/local/sbin/willbert-controle", "foto", timeout=60)
@@ -112,6 +115,7 @@ def foto():
         if rc != 0:
             return jsonify(ok=False, msg=out), 500
         e["modo"] = "rosto" if e["modo"] in ("relevo", "original") else e["modo"]
+        e["imagem"] = destino
         salva(e)
         rc2, out2 = aplica(e)
         return jsonify(ok=rc2 == 0, msg=out.splitlines()[-1] + (" · " + out2.splitlines()[-1] if out2 else ""))
@@ -140,12 +144,9 @@ def ajuste():
         if "giro" in d or "espelho" in d:
             e["giro"] = int(d.get("giro", e["giro"])) % 360
             e["espelho"] = bool(d.get("espelho", e["espelho"]))
-            for nome in ("enviada.jpg", "camera.jpg"):  # refaz o relevo com a nova orientação
-                p = os.path.join(FOTOS, nome)
-                if os.path.exists(p) and os.path.getmtime(p) >= max(
-                        [os.path.getmtime(os.path.join(FOTOS, n)) for n in ("enviada.jpg", "camera.jpg")
-                         if os.path.exists(os.path.join(FOTOS, n))]):
-                    prepara(p, e)
+            img = e.get("imagem")  # refaz o relevo com a nova orientação
+            if img and os.path.exists(img):
+                prepara(img, e)
         salva(e)
         if qual() == "rosto":
             if "giro" in d or "espelho" in d:

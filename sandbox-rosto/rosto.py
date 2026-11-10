@@ -1,15 +1,15 @@
-"""Prepara uma foto para o modo Rosto do SARndbox.
+"""Prepara uma imagem para o modo Foto do SARndbox (tudo local, na pasta do SARndbox-rosto).
 
-  python rosto.py <foto.jpg> [--giro 0] [--espelho] [--sem-recorte]
+  python rosto.py <imagem> [--giro 0] [--espelho] [--saida DIR] [--com-fundo | --sem-fundo]
 
-Gera em fotos/:
-  rosto.png  o rosto recortado (retrato 3:4), sem fundo (preto = projetor apagado),
-             contraste reforçado para projetar na areia
+Gera em DIR (padrão fotos/):
+  rosto.png  a imagem para projetar, contraste reforçado (preto = projetor apagado)
   rosto.dem  relevo-alvo para o modo Esculpir (altura em cm sobre a caixa de areia)
   teste.png  (com --teste) uma imagem de orientação: seta para CIMA e cantos coloridos
-Usa o detector de rosto do Willbert (YuNet). Sem rosto achado, usa o centro da foto.
-O fundo sai com o U²-Net de pessoas (modelos/u2net_human_seg.onnx, do projeto rembg) pelo OpenCV;
-foto PNG que já vem transparente usa a própria transparência. --com-fundo mantém o fundo.
+Com rosto (YuNet, modelos/): recorte retrato 3:4 em volta do rosto e fundo removido pelo U²-Net
+de pessoas (modelos/u2net_human_seg.onnx, do projeto rembg), via OpenCV.
+Sem rosto: a imagem inteira, com o fundo (--sem-fundo força o recorte de pessoa).
+PNG que já vem transparente usa a própria transparência.
 """
 import argparse
 import os
@@ -21,8 +21,16 @@ import numpy as np
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 FOTOS = os.path.join(AQUI, "fotos")
-BOX = "/root/etc/SARndbox-2.8/BoxLayout.txt"
-YUNET = "/opt/visao/models/face_detection_yunet_2023mar.onnx"
+def _local(*opcoes):
+    """Primeiro caminho que existe (o da pasta do SARndbox-rosto vem antes)."""
+    return next((c for c in opcoes if os.path.exists(c)), opcoes[0])
+
+
+# a mesma calibração que o binário da cópia usa (etc/ da cópia)
+BOX = _local(os.path.join(AQUI, "etc", "SARndbox-2.8", "BoxLayout.txt"), "/root/etc/SARndbox-2.8/BoxLayout.txt")
+YUNET = _local(os.path.join(AQUI, "modelos", "face_detection_yunet_2023mar.onnx"),
+               "/opt/visao/models/face_detection_yunet_2023mar.onnx")
+LADO_MAX = 1024  # imagem inteira (sem rosto): maior lado
 U2NET = os.path.join(AQUI, "modelos", "u2net_human_seg.onnx")
 SAIDA_W, SAIDA_H = 600, 800
 
@@ -127,8 +135,9 @@ def relevo(img):
     (olhos e boca afundam, nariz e testa sobem). Sem câmera 3D é uma aproximação."""
     g = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32) / 255
     g = cv2.GaussianBlur(g, (0, 0), 6)
-    yy, xx = np.mgrid[0:SAIDA_H, 0:SAIDA_W]
-    r2 = ((xx - SAIDA_W / 2) / (SAIDA_W * 0.42)) ** 2 + ((yy - SAIDA_H * 0.48) / (SAIDA_H * 0.46)) ** 2
+    hh, ww = g.shape
+    yy, xx = np.mgrid[0:hh, 0:ww]
+    r2 = ((xx - ww / 2) / (ww * 0.42)) ** 2 + ((yy - hh * 0.48) / (hh * 0.46)) ** 2
     cupula = np.sqrt(np.clip(1 - r2, 0, 1))
     h = 9.0 * cupula + 4.0 * (g - g[cupula > 0.3].mean()) * (cupula > 0)
     return np.clip(h, 0, 14)
@@ -140,7 +149,8 @@ def grava_dem(h, giro, espelho, caminho):
     bw, bh = bmax - bmin
     r = giro % 360
     ext_x, ext_y = (bh, bw) if r in (90, 270) else (bw, bh)
-    aspect = SAIDA_W / SAIDA_H
+    ih, iw = h.shape
+    aspect = iw / ih
     H = min(ext_y, ext_x / aspect); W = H * aspect
     nx, ny = 200, int(200 * bh / bw)
     xs = np.linspace(bmin[0], bmax[0], nx); ys = np.linspace(bmin[1], bmax[1], ny)
@@ -151,8 +161,8 @@ def grava_dem(h, giro, espelho, caminho):
         px = -px
     u, v = px / W + 0.5, py / H + 0.5
     dentro = (u >= 0) & (u <= 1) & (v >= 0) & (v <= 1)
-    col = np.clip(u * (SAIDA_W - 1), 0, SAIDA_W - 1).astype(int)
-    lin = np.clip((1 - v) * (SAIDA_H - 1), 0, SAIDA_H - 1).astype(int)  # v para cima, linha 0 em cima
+    col = np.clip(u * (iw - 1), 0, iw - 1).astype(int)
+    lin = np.clip((1 - v) * (ih - 1), 0, ih - 1).astype(int)  # v para cima, linha 0 em cima
     dem = np.where(dentro, h[lin, col], 0).astype(np.float32)
     with open(caminho, "wb") as f:
         f.write(struct.pack("<2i", nx, ny))
@@ -178,8 +188,11 @@ def main():
     ap.add_argument("--sem-recorte", action="store_true")
     ap.add_argument("--teste", action="store_true")
     ap.add_argument("--com-fundo", action="store_true", help="não recorta o fundo")
+    ap.add_argument("--sem-fundo", action="store_true", help="recorta a pessoa mesmo sem rosto achado")
+    ap.add_argument("--saida", default=FOTOS, help="pasta onde gravar rosto.png e rosto.dem")
     a = ap.parse_args()
     os.makedirs(FOTOS, exist_ok=True)
+    os.makedirs(a.saida, exist_ok=True)
     if a.teste:
         img = imagem_teste()
         cv2.imwrite(os.path.join(FOTOS, "teste.png"), img)
@@ -199,22 +212,28 @@ def main():
         bruta = bruta[..., :3]
     img = np.ascontiguousarray(bruta)
     rosto = None if a.sem_recorte else acha_rosto(img)
-    if not a.sem_recorte and rosto is None:
-        print("aviso: não achei um rosto; usando o centro da foto", file=sys.stderr)
-    if a.com_fundo:
-        out = realca(recorta(img, rosto))
-        pessoa = np.ones(out.shape[:2], np.float32)
-    else:
-        if alfa is None:
-            if not os.path.exists(U2NET):
-                sys.exit(f"falta o modelo de recorte {U2NET}")
-            alfa = mascara_pessoa(img)
+    tirar_fundo = not a.com_fundo and (alfa is not None or rosto is not None or a.sem_fundo)
+    if tirar_fundo and alfa is None:
+        if not os.path.exists(U2NET):
+            sys.exit(f"falta o modelo de recorte {U2NET}")
+        alfa = mascara_pessoa(img)
+    if rosto is not None:   # retrato 3:4 em volta do rosto
         foto = realca(recorta(img, rosto), vinheta=False)
-        alfa = recorta(alfa, rosto, borda=cv2.BORDER_CONSTANT)
+        alfa = recorta(alfa, rosto, borda=cv2.BORDER_CONSTANT) if tirar_fundo else None
+    else:                   # imagem inteira, sem cortar
+        esc = min(1.0, LADO_MAX / max(img.shape[:2]))
+        tam = (round(img.shape[1] * esc), round(img.shape[0] * esc))
+        foto = realca(cv2.resize(img, tam, interpolation=cv2.INTER_AREA), vinheta=False)
+        alfa = cv2.resize(alfa, tam, interpolation=cv2.INTER_AREA) if tirar_fundo else None
+    if tirar_fundo:
         out, pessoa = tira_fundo(foto, alfa)
-    cv2.imwrite(os.path.join(FOTOS, "rosto.png"), out)
-    grava_dem(relevo(out) * (pessoa > 0.5), a.giro, a.espelho, os.path.join(FOTOS, "rosto.dem"))
-    print("rosto achado" if rosto is not None else "sem rosto", os.path.join(FOTOS, "rosto.png"))
+    else:
+        out, pessoa = foto, np.ones(foto.shape[:2], np.float32)
+    png, dem = os.path.join(a.saida, "rosto.png"), os.path.join(a.saida, "rosto.dem")
+    cv2.imwrite(png, out)
+    grava_dem(relevo(out) * (pessoa > 0.5), a.giro, a.espelho, dem)
+    print(("rosto achado" if rosto is not None else "imagem inteira")
+          + (", sem fundo" if tirar_fundo else ", com fundo"), png)
 
 
 if __name__ == "__main__":

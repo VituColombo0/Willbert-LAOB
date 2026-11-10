@@ -3,7 +3,7 @@ Description=Painel do celular para a caixa de areia (modo Rosto)
 After=graphical-session.target
 
 [Service]
-ExecStart=/opt/visao/venv/bin/python /home/laob/SARndbox-rosto/painel.py
+ExecStart=/home/laob/SARndbox-rosto/venv/bin/python /home/laob/SARndbox-rosto/painel.py
 WorkingDirectory=/home/laob/SARndbox-rosto
 Restart=always
 RestartSec=10

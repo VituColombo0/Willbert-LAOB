@@ -50,14 +50,25 @@ girar/espelhar e ajustar deformação, sombra e mistura com as cores de relevo.
 - Ao ligar o lab2, o autostart (`~/.config/autostart/SARndbox.desktop`) roda `areia-topografia`:
   o SARndbox original em tela cheia no projetor. O atalho antigo ficou em
   `~/SARndbox-rosto/SARndbox.desktop.original` (para desfazer, copie-o de volta).
-- No terminal (os dois ficam em `~/.local/bin`):
-  - `areia-foto <arquivo>`: recorta o fundo da foto, prepara e projeta só a pessoa (fundo preto).
-  - `areia-foto`: projeta de novo a última foto. `areia-foto camera`: foto pela câmera do laboratório.
-  - `areia-foto girar` / `areia-foto espelhar`: se a pessoa aparecer de lado ou invertida.
+- **Pasta das imagens:** `~/Pictures/Areia` (atalho "Areia" na barra lateral do Arquivos). Coloque
+  ali as fotos (.jpg, .png, .webp, .bmp). No terminal (comandos em `~/.local/bin`):
+  - `areia-foto`: lista as imagens da pasta e pergunta o número (Enter = a última usada).
+  - `areia-foto 3` / `areia-foto gato`: escolhe direto pelo número ou por parte do nome.
+  - `areia-foto ~/Downloads/x.jpg`: qualquer arquivo; ele é copiado para a pasta Areia.
+  - `areia-foto lista`, `areia-foto pasta` (abre a pasta), `areia-foto girar`, `areia-foto espelhar`.
+  - `areia-foto camera`: foto pela câmera do laboratório (só essa opção depende do Willbert).
   - `areia-topografia`: volta à topografia.
+- Com rosto na imagem: recorte retrato em volta do rosto, sem fundo. Sem rosto: a imagem inteira,
+  com fundo (`--sem-fundo` recorta a pessoa mesmo assim; `--com-fundo` nunca recorta). PNG já
+  transparente usa a própria transparência. A preparação (~5 s) fica guardada em `fotos/cache/`
+  (40 últimas): trocar para uma imagem já usada leva ~1 s.
+- Tudo local nesta pasta: `venv/` (OpenCV, NumPy, Flask, waitress), `modelos/` (YuNet e U²-Net) e a
+  calibração de `etc/`. Recriar o venv:
+  `python3 -m venv venv && venv/bin/pip install numpy==2.2.6 opencv-python-headless==5.0.0.93 Flask==3.1.3 waitress==3.0.2`
+  As fotos enviadas pelo painel do celular também vão para a pasta Areia.
 - No modo foto não aparecem cores de relevo, curvas de nível nem água: só a foto, que amplia onde a
   areia está mais alta e ganha sombra do relevo. No painel, "mistura" traz o relevo de volta, e
   deformação 0 + sombra 0 projeta a foto sem efeito nenhum.
 - Recorte do fundo: U²-Net de pessoas (`modelos/u2net_human_seg.onnx`, 176 MB, release v0.0.0 do
-  projeto rembg) rodando no OpenCV do Willbert, ~3 s. Baixar com:
+  projeto rembg) rodando no OpenCV do venv local, ~3 s. Baixar com:
   `wget -P modelos https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx`
