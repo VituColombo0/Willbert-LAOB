@@ -67,3 +67,25 @@ token = ""
 chat_id = ""
 notify_unknown = true      # foto quando aparece alguém não cadastrado
 notify_entries = false     # aviso a cada chegada de membro
+
+# ---------------------------------------------------------------- Willbert (PC)
+[hardware]
+# auto = escolhe pelo hardware (visao-cli hardware mostra o que foi escolhido)
+# tvbox | cpu | cpu-forte | gpu | gpu-forte
+profile = "auto"
+
+[assistant]
+# Conversa pela câmera: chame pelo nome ("Willbert, quem está aqui?").
+# enabled = true          # o perfil liga no PC
+# name = "Willbert"
+# follow_up_s = 10        # depois de responder, escuta a continuação sem precisar do nome
+# max_answer_chars = 240  # respostas curtas = fala clara
+
+[llm]
+# Modelo local no Ollama (o perfil escolhe: qwen3:1.7b / qwen3:4b / qwen3:8b)
+# model = "qwen3:4b"
+
+[stt]
+# Reconhecimento de fala (faster-whisper). O perfil escolhe small (CPU) ou large-v3-turbo (GPU).
+# model = "small"
+# prompt = "Willbert, Victor, Gazziro, Mario, Lucas, laboratório."

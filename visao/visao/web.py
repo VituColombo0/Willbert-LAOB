@@ -271,6 +271,17 @@ def live_jpg():
     return r
 
 
+@app.route("/saude")
+def saude():
+    """Sem login e sem dados pessoais: só diz se o detector está vivo e vendo a câmera.
+    O mini servidor (reserva) consulta isto para saber se precisa assumir."""
+    st, warn = read_status()
+    vivo = bool(st) and time.time() - st.get("ts", 0) <= 30
+    body = {"ok": vivo and bool(st.get("camera_online")), "detector": vivo,
+            "camera": bool(st and st.get("camera_online")), "perfil": (st or {}).get("hardware")}
+    return jsonify(body), (200 if body["ok"] else 503)
+
+
 @app.route("/api/status")
 @login_required
 def api_status():

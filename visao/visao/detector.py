@@ -74,6 +74,8 @@ def annotate(frame, items):
 
 
 class Detector:
+    assistente = ouvido = None  # conversa (só quando ligada)
+
     def __init__(self, cfg):
         self.cfg = cfg
         st, dc = cfg.storage, cfg.detection
@@ -106,6 +108,10 @@ class Detector:
         # frases ficam no disco: a voz natural (Piper) é lenta para gerar e não deve se perder
         self.speaker = Speaker(cfg.greeting, os.path.join(self.data, "tts"))
         self.speaker.start()
+        # conversa pela câmera (PC): ouvido -> assistente -> LLM/respostas prontas -> voz
+        self.assistente = self.ouvido = None
+        if cfg.assistant.enabled:
+            self._start_assistant(cfg)
         self.greet_batch = None  # cumprimento esperando a janela para juntar o grupo
         self.greeted = {}       # member_id -> dia em que já foi cumprimentado (ou tentativa recente)
         self._temp, self._temp_ts, self._thermal_level = 0.0, 0.0, 0
@@ -120,6 +126,56 @@ class Detector:
         self._timers = {}
         self.mode = None
         self.stopping = False
+
+    def _start_assistant(self, cfg):
+        try:
+            from .assistente import Assistente
+            from .llm import LLM
+            from .ouvido import Ouvido
+        except ImportError as e:
+            log.error("conversa desligada: falta dependência (%s)", e)
+            return
+        llm = LLM(cfg.llm, cfg.assistant.name)
+        self.assistente = Assistente(cfg, self.speaker, self.fatos, llm)
+        self.ouvido = Ouvido(cfg.assistant, cfg.stt, self.speaker, self.assistente.ouviu)
+        self.ouvido.start()
+        threading.Thread(target=llm.warmup, daemon=True, name="llm-warmup").start()
+        log.info("conversa ligada: diga '%s' perto da câmera (LLM %s, Whisper %s/%s, perfil %s)",
+                 cfg.assistant.name, cfg.llm.model or "nenhum", cfg.stt.model, cfg.stt.device,
+                 cfg.hardware.active)
+
+    def fatos(self):
+        """O que o assistente sabe agora: quem está na câmera, no laboratório, quem chegou hoje.
+        Roda na thread da conversa: usa uma conexão própria ao banco."""
+        now = time.time()
+        names = dict(self.gallery.names)
+        for _ in range(3):
+            try:
+                tracks = list(self.tracker.tracks.values())
+                presentes = sorted(((names.get(m, "?"), s["last_seen_ts"])
+                                    for m, s in list(self.presence.open.items())), key=lambda x: -x[1])
+                break
+            except RuntimeError:  # o detector mexeu nos dicionários ao mesmo tempo
+                time.sleep(0.01)
+        else:
+            tracks, presentes = [], []
+        vistos = [t for t in tracks if t.member_id is not None and now - t.last_ts < 2.5]
+        falando = max(vistos, key=lambda t: t.face.w) if vistos else None  # o mais perto
+        day0 = datetime.fromtimestamp(now).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        con = db.connect(self.db_path)
+        try:
+            hoje = [(names.get(r["member_id"], "?"), r["first"]) for r in con.execute(
+                "SELECT member_id, MIN(start_ts) AS first FROM sessions WHERE start_ts >= ? "
+                "GROUP BY member_id ORDER BY first", (day0,))]
+            ultima = {names.get(r["member_id"], "?"): r["last"] for r in con.execute(
+                "SELECT member_id, MAX(last_seen_ts) AS last FROM sessions GROUP BY member_id")}
+            membros = [r["name"] for r in con.execute("SELECT name FROM members WHERE active = 1 ORDER BY name")]
+        finally:
+            con.close()
+        return {"agora": datetime.fromtimestamp(now), "membros": membros,
+                "na_camera": sorted({names.get(t.member_id, "?") for t in vistos}),
+                "pessoa_falando": names.get(falando.member_id) if falando else None,
+                "presentes": presentes, "hoje": hoje, "ultima_vez": ultima}
 
     # ------------------------------------------------------------------ loop
     def every(self, name, period):
@@ -465,10 +521,29 @@ class Detector:
             return
         self.greet_batch = None
         names = [self.gallery.names.get(m, "") for m in b["members"]]
+        if self.assistente is not None and self.cfg.greeting.llm:
+            # cumprimento com contexto pelo LLM, sem travar o detector; se demorar, frase padrão
+            threading.Thread(target=self._greet_llm, args=(names, list(b["members"]), b["people"]),
+                             daemon=True, name="greet-llm").start()
+            log.info("cumprimento (LLM) %.1f s depois de o rosto aparecer: %s", now - b["seen"], names)
+            return
         text = self.speaker.greet(names, b["members"], b["people"])
         log.info("cumprimento enfileirado %.1f s depois de o rosto aparecer "
                  "(%d identificado(s), %d pessoa(s) na cena): %s",
                  now - b["seen"], len(names), b["people"], text)
+
+    def _greet_llm(self, names, member_ids, people):
+        try:
+            text = self.assistente.cumprimento(names, people, self.fatos(),
+                                               float(self.cfg.greeting.llm_timeout_s))
+        except Exception:
+            log.exception("cumprimento pelo LLM falhou")
+            text = None
+        if text:
+            self.speaker.say(text, member_ids, "piper", temp=True)
+            log.info("cumprimento do LLM: %s", text)
+        else:
+            self.speaker.greet(names, member_ids, people)
 
     def drain_speaker(self):
         """Só marca 'cumprimentado hoje' quando a câmera de fato falou."""
@@ -886,6 +961,9 @@ class Detector:
             "gallery_members": len(set(self.gallery.labels.tolist())),
             "capture": ({"member_id": self.capture["member_id"], "captured": self.capture["captured"],
                          "target": self.capture["target"]} if self.capture else None),
+            "hardware": self.cfg.hardware.active,
+            "assistant": (dict(self.assistente.status(), ouvido=self.ouvido.status())
+                          if self.assistente else {"enabled": False}),
             "speaker": {"enabled": self.speaker.enabled, "spoken": self.speaker.spoken,
                         "last_ok": self.speaker.last_ok, "last_error": self.speaker.last_error,
                         "last_route": self.speaker.last_route, "output": self.speaker.output,
@@ -908,6 +986,8 @@ class Detector:
         if self.rec:
             self.rec.stop()
         self.onvif.stop()
+        if self.ouvido:
+            self.ouvido.stop()
 
 
 def main():

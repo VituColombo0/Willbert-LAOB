@@ -21,9 +21,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import struct
+import tempfile
 import wave
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from .fala import saudacao  # noqa: F401  (usado aqui e importado de speaker por outros módulos)
 
 import numpy as np
 
@@ -102,13 +105,6 @@ class _AudioServer:
         threading.Thread(target=self.httpd.serve_forever, daemon=True, name="audio-http").start()
 
 
-def saudacao(hour=None):
-    h = datetime.now().hour if hour is None else hour
-    if 5 <= h < 12:
-        return "Bom dia"
-    if 12 <= h < 18:
-        return "Boa tarde"
-    return "Boa noite"
 
 
 class Speaker:
@@ -131,6 +127,9 @@ class Speaker:
         self._piper_broken, self._piper_fails = False, 0
         self._piper_proc, self._paused = None, False
         self._audio = None
+        self.playing, self.last_play_end = False, 0.0  # o ouvido fica surdo enquanto a câmera fala
+        base = "/dev/shm" if os.path.isdir("/dev/shm") else None
+        self._tmp = tempfile.mkdtemp(prefix="visao-fala-", dir=base)
         self.last_connect_s = None
         if gcfg.enabled and not self.enabled:
             self.last_error = "saída 'camera' sem a senha da conta Tapo (greeting.tapo_cloud_password)"
@@ -182,16 +181,23 @@ class Speaker:
                             return t + " (voz anterior; a nova está sendo gerada)"
                         return t
             self.generate_later([options[0]])
+            if self.cfg.live_synth:  # PC: o Piper gera em ~0,3 s, então fala já na voz natural
+                self.say(options[0], list(member_ids), "piper")
+                return options[0]
             self.say(options[0], list(member_ids), "espeak")
             return options[0] + " (voz reserva; a natural está sendo gerada)"
         self.say(options[0], list(member_ids), "espeak")
         return options[0]
 
-    def say(self, text, member_id=None, engine=None, path=None):
+    def speak_now(self, text):
+        """Fala uma resposta da conversa: gerada na hora e descartada depois (não vai pro cache)."""
+        self.say(text, None, "piper" if self.engine() == "piper" else "espeak", temp=True)
+
+    def say(self, text, member_id=None, engine=None, path=None, temp=False):
         if not self.enabled:
             return
         try:
-            self.q.put_nowait((text, member_id, engine, path))
+            self.q.put_nowait((text, member_id, engine, path, temp))
         except queue.Full:
             log.warning("fila de fala cheia; descartando: %s", text)
             self.results.put((member_id, False, time.time()))
@@ -295,14 +301,19 @@ class Speaker:
         key = hashlib.sha1(f"{voice}|{pad}|{text}".encode()).hexdigest()[:16]
         return os.path.join(self.cache, f"{key}.wav")
 
-    def synth(self, text, engine=None):
-        """Gera (ou reaproveita) o WAV da frase com o motor pedido."""
+    def synth(self, text, engine=None, interactive=False, out_dir=None):
+        """Gera (ou reaproveita) o WAV da frase com o motor pedido. interactive=True: alguém
+        está esperando (cumprimento/resposta): não pausa nem espera a fila de fundo."""
         engine = engine or self.engine()
         path = self._path(text, engine)
+        if out_dir:
+            path = os.path.join(out_dir, os.path.basename(path))
         if os.path.exists(path):
             return path
         tmp = f"{path}.{threading.get_ident()}.tmp.wav"
-        if engine == "piper":
+        if engine == "piper" and interactive:
+            self._piper(text, tmp, interactive=True)
+        elif engine == "piper":
             with self._piper_lock:  # um Piper por vez (pesado para a TV Box)
                 self._piper(text, tmp)
         else:
@@ -328,14 +339,20 @@ class Speaker:
             return "piper"
         return "espeak"
 
-    def _piper(self, text, out):
+    def _piper(self, text, out, interactive=False):
         """Voz neural (Piper), offline. Lenta na TV Box (~30 s por frase): roda com prioridade
         mínima para não atrapalhar o reconhecimento, e o resultado fica guardado."""
         env = dict(os.environ, LD_LIBRARY_PATH=os.path.dirname(self.cfg.piper_bin),
                    ESPEAK_DATA_PATH=os.path.join(os.path.dirname(self.cfg.piper_bin), "espeak-ng-data"))
+        extra, text = self._compat(text)
+        if interactive:  # alguém esperando: prioridade normal, sem pausa
+            subprocess.run([self.cfg.piper_bin, "--model", self.cfg.piper_model,
+                            "--length_scale", str(self.cfg.piper_length_scale),
+                            "--sentence_silence", "0.2", "--output_file", out] + extra,
+                           input=text.encode(), check=True, capture_output=True, timeout=120, env=env)
+            return
         while self._paused:  # não começa uma frase nova enquanto há gente chegando
             time.sleep(0.5)
-        extra, text = self._compat(text)
         p = subprocess.Popen(["nice", "-n", "19", self.cfg.piper_bin, "--model", self.cfg.piper_model,
                               "--length_scale", str(self.cfg.piper_length_scale),
                               "--sentence_silence", "0.25", "--output_file", out] + extra,
@@ -511,6 +528,13 @@ class Speaker:
 
     def play(self, path):
         """Toca pela saída configurada. Retorna o nome da saída usada."""
+        self.playing = True
+        try:
+            return self._play(path)
+        finally:
+            self.playing, self.last_play_end = False, time.time()
+
+    def _play(self, path):
         path = self.louder(path)
         if self.camera_ok:
             try:
@@ -534,10 +558,18 @@ class Speaker:
 
     def _run(self):
         while True:
-            text, member_id, engine, path = self.q.get()
+            text, member_id, engine, path, temp = self.q.get()
             ok = False
             try:
-                self.last_route = self.play(path or self.synth(text, engine))
+                if path is None:
+                    try:
+                        path = self.synth(text, engine, interactive=True, out_dir=self._tmp if temp else None)
+                    except Exception as e:  # Piper falhou: não deixa a pessoa sem resposta
+                        if engine != "piper":
+                            raise
+                        log.warning("Piper falhou (%s); falando com o espeak", e)
+                        path = self.synth(text, "espeak", out_dir=self._tmp if temp else None)
+                self.last_route = self.play(path)
                 self.last_ok, self.last_error, ok = time.time(), None, True
                 self.spoken += 1
                 log.info("falou (%s): %s", self.last_route, text)
@@ -546,10 +578,17 @@ class Speaker:
                 log.warning("não foi possível falar '%s': %s", text, self.last_error)
             if not (self.camera_ok or self.local_ok):
                 self.enabled = False
-            self.results.put((member_id, ok, time.time()))
+            if temp:  # resposta de conversa: apaga o áudio e as versões derivadas
+                for f in os.listdir(self._tmp):
+                    try:
+                        os.remove(os.path.join(self._tmp, f))
+                    except OSError:
+                        pass
+            if member_id is not None:
+                self.results.put((member_id, ok, time.time()))
             if not self.enabled:
                 while not self.q.empty():
-                    _, mid, _, _ = self.q.get_nowait()
+                    _, mid, _, _, _ = self.q.get_nowait()
                     self.results.put((mid, False, time.time()))
                 return
-            time.sleep(1)
+            time.sleep(0.3)

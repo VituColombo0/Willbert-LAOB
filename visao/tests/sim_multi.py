@@ -15,7 +15,10 @@ base = {m: v / np.linalg.norm(v) for m, v in {1: rng.normal(size=128), 2: rng.no
 
 def emb_of(m, sim):
     """Embedding com similaridade ~sim com o membro m (9 = visitante)."""
-    noise = rng.normal(size=128); noise -= (noise @ base[m]) * base[m]; noise /= np.linalg.norm(noise)
+    noise = rng.normal(size=128)
+    q, _ = np.linalg.qr(np.stack(list(base.values())).T)  # base ortonormal dos 4 rostos
+    noise -= q @ (q.T @ noise)  # ruído sem semelhança com nenhum membro: teste determinístico
+    noise /= np.linalg.norm(noise)
     v = sim * base[m] + np.sqrt(1 - sim ** 2) * noise
     return (v / np.linalg.norm(v)).astype(np.float32)
 
@@ -36,7 +39,7 @@ class FakeEngine:
     def embed(self, aligned): raise RuntimeError
 
 def make():
-    cfg = load("/nonexistent.toml")
+    cfg = load("/nonexistent.toml", detect_hardware=False)
     d = Detector.__new__(Detector)
     d.cfg = cfg
     d.con = db.connect(":memory:")

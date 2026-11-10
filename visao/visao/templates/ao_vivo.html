@@ -23,6 +23,10 @@
       <dt>Eventos ONVIF</dt><dd id="onvif">—</dd>
       <dt>Gravação de clipes</dt><dd id="rec">—</dd>
       <dt>Cumprimento falado</dt><dd id="speaker">—</dd>
+      <dt>Conversa</dt><dd id="assistant">—</dd>
+      <dt>Última pergunta</dt><dd id="heard">—</dd>
+      <dt>Última resposta</dt><dd id="answer">—</dd>
+      <dt>Perfil do hardware</dt><dd id="profile">—</dd>
       <dt>Tempo por ciclo</dt><dd id="cycle">—</dd>
       <dt>Galeria</dt><dd id="gallery">—</dd>
       <dt>Temperatura / carga</dt><dd id="temp">—</dd>
@@ -49,6 +53,12 @@ async function tick() {
       $('rec').textContent = s.recorder_online ? 'ativa' : 'parada';
       const sp = s.speaker || {};
       $('speaker').textContent = sp.enabled ? (sp.last_error ? 'erro: ' + sp.last_error : `ok · voz ${sp.engine === 'piper' ? 'natural' : 'robótica'} · ${sp.spoken} falas${sp.last_route ? ' · última pela ' + sp.last_route : ''}${sp.pending ? ' · gerando ' + sp.pending + ' frases' : ''}`) : (sp.last_error || 'desligado');
+      const ast = s.assistant || {};
+      const ou = ast.ouvido || {};
+      $('assistant').textContent = ast.enabled ? `${ou.state || '—'}${ou.error ? ' · erro: ' + ou.error : ''} · fala: ${ou.model || '—'} (${ou.device || '—'}) · LLM: ${ast.llm || 'só respostas prontas'}${ast.llm_ok === false ? ' (fora do ar)' : ''}${ast.listening_follow_up ? ' · ouvindo continuação' : ''}` : 'desligada';
+      $('heard').textContent = ast.last_heard || '—';
+      $('answer').textContent = ast.last_answer ? `${ast.last_answer} (${ast.last_ms} ms)` : '—';
+      $('profile').textContent = s.hardware || '—';
       $('cycle').textContent = s.cycle_ms ? (s.cycle_ms / 1000).toFixed(1) + ' s' : '—';
       $('gallery').textContent = `${s.gallery_members} membros · ${s.gallery_samples} amostras`;
       $('temp').textContent = `${s.cpu_temp ?? '—'} °C · ${s.load}`;

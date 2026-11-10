@@ -1,0 +1,9 @@
+# PC (x86_64): instalado pelo deploy/install-pc.sh (PyPI normal)
+opencv-python-headless>=4.10
+numpy
+onvif-zeep
+flask>=3.0
+waitress
+# conversa pela câmera
+faster-whisper>=1.1
+webrtcvad-wheels

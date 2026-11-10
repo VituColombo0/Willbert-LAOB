@@ -173,6 +173,63 @@ def cmd_falar(a):
     return 0
 
 
+def cmd_hardware(a):
+    """Mostra o hardware detectado e o perfil escolhido."""
+    from . import hardware
+    hw = hardware.detect()
+    prof = hardware.choose(hw)
+    print(hardware.resumo(hw, prof))
+    if hw.get("nvidia_sem_driver"):
+        print("  atenção: há placa NVIDIA sem driver (sudo ubuntu-drivers install && reiniciar)")
+    print(f"  perfil em uso: {cfg.hardware.active} (mude com [hardware] profile no config.toml)")
+    for sec in ("detection", "assistant", "greeting", "llm", "stt"):
+        keys = hardware.PROFILES.get(cfg.hardware.active, {}).get(sec, {})
+        print(f"  [{sec}] " + ", ".join(f"{k}={cfg[sec].get(k)}" for k in keys))
+    return 0
+
+
+def cmd_conversar(a):
+    """Testa a conversa sem microfone: digite a frase como se tivesse falado com a câmera."""
+    from .assistente import Assistente
+    from .llm import LLM
+    from .speaker import Speaker
+    sp = Speaker(cfg.greeting, os.path.join(cfg.storage.data_dir, "tts"))
+    if a.mudo:
+        sp.speak_now = lambda t: None
+    else:
+        sp.start()
+    con = db.connect(os.path.join(cfg.storage.data_dir, "visao.db"))
+    names = {r["id"]: r["name"] for r in con.execute("SELECT id, name FROM members")}
+
+    def fatos():
+        from datetime import datetime as dt
+        now = time.time()
+        day0 = dt.fromtimestamp(now).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        pres = [(names.get(r["member_id"], "?"), r["last_seen_ts"]) for r in con.execute(
+            "SELECT member_id, last_seen_ts FROM sessions WHERE end_ts IS NULL AND last_seen_ts > ?",
+            (now - 1800,))]
+        hoje = [(names.get(r["member_id"], "?"), r["f"]) for r in con.execute(
+            "SELECT member_id, MIN(start_ts) f FROM sessions WHERE start_ts >= ? GROUP BY member_id ORDER BY f",
+            (day0,))]
+        ult = {names.get(r["member_id"], "?"): r["l"] for r in con.execute(
+            "SELECT member_id, MAX(last_seen_ts) l FROM sessions GROUP BY member_id")}
+        return {"agora": dt.fromtimestamp(now), "membros": sorted(names.values()), "na_camera": [],
+                "pessoa_falando": a.quem, "presentes": pres, "hoje": hoje, "ultima_vez": ult}
+
+    ass = Assistente(cfg, sp, fatos, LLM(cfg.llm, cfg.assistant.name))
+    frases = [a.texto] if a.texto else iter(lambda: input("você> "), "")
+    for f in frases:
+        t0 = time.time()
+        r = ass.ouviu(f"{cfg.assistant.name}, {f}" if a.sem_nome else f)
+        print(f"{cfg.assistant.name}> {r if r else '(não respondeu: faltou chamar pelo nome)'}"
+              f"  [{(time.time() - t0) * 1000:.0f} ms]")
+    if not a.mudo:
+        time.sleep(1)
+        while not sp.q.empty() or sp.playing:
+            time.sleep(0.2)
+    return 0
+
+
 def tapo_url(g, host, auth=None):
     """URL tapo:// do go2rtc. Firmwares novos da C200 pedem admin + SHA256 MAIÚSCULO da senha."""
     import hashlib
@@ -232,7 +289,9 @@ def cmd_go2rtc_config(a):
         src = f"rtsp://{quote(cam.user, safe='')}:{quote(cam.password, safe='')}@{cam.host}:{cam.rtsp_port}/{cam.sub_stream}"
     text = ("# gerado por: visao-cli go2rtc-config (não edite; mude o /opt/visao/config.toml)\n"
             "api:\n  listen: \"127.0.0.1:1984\"\n"
-            "rtsp:\n  listen: \"\"\n"
+            # conversa ligada: o áudio do microfone da câmera sai por um RTSP só local
+            + (f"rtsp:\n  listen: \"127.0.0.1:8554\"\n" if cfg.assistant.enabled else "rtsp:\n  listen: \"\"\n")
+            + 
             "webrtc:\n  listen: \"\"\n"
             "log:\n  level: warn\n"
             f"streams:\n  {g.stream}:\n    - \"{src}\"\n")
@@ -273,6 +332,13 @@ def main():
     sp.add_argument("texto")
     sp.add_argument("--voz", choices=["piper", "espeak"], help="motor de voz (padrão: o configurado)")
     sp.set_defaults(fn=cmd_falar)
+    sub.add_parser("hardware", help="hardware detectado e perfil em uso").set_defaults(fn=cmd_hardware)
+    sp = sub.add_parser("conversar", help="testa a conversa digitando (sem microfone)")
+    sp.add_argument("texto", nargs="?", help="uma frase; sem ela, modo interativo")
+    sp.add_argument("--quem", help="simula quem está na frente da câmera (ex.: Victor)")
+    sp.add_argument("--sem-nome", action="store_true", help="não precisa começar com o nome do assistente")
+    sp.add_argument("--mudo", action="store_true", help="só mostra a resposta, sem tocar na câmera")
+    sp.set_defaults(fn=cmd_conversar)
     a = p.parse_args()
     sys.exit(a.fn(a))
 

@@ -87,6 +87,9 @@ DEFAULTS = {
                            "{saudacao} a todos!"],
         "group_window_s": 5,                 # máx. de espera por outros rostos para cumprimentar juntos
         "arrival_window_min": 15,            # só cumprimenta quem chegou há no máx. N minutos
+        "live_synth": False,                 # PC: gera a frase na hora se não estiver pronta (Piper é rápido)
+        "llm": False,                        # PC com placa de vídeo: cumprimento com contexto pelo LLM
+        "llm_timeout_s": 1.5,                # se o LLM demorar mais que isso, usa a frase padrão
         "group_min_s": 0.3,                  # sozinho na cena: fala praticamente na hora
         "engine": "piper",                   # piper (voz neural, natural) ou espeak (robótica, leve)
         "piper_bin": "/opt/visao/piper/piper",
@@ -117,6 +120,42 @@ DEFAULTS = {
         "end": "06:00",
         "cooldown_min": 5,         # no máximo um alerta a cada N minutos
     },
+    "hardware": {
+        "profile": "auto",         # auto | tvbox | cpu | cpu-forte | gpu | gpu-forte (ver hardware.py)
+    },
+    # Conversa pela câmera: microfone da Tapo -> reconhecimento de fala -> resposta -> alto-falante
+    "assistant": {
+        "enabled": False,          # o perfil liga no PC
+        "name": "Willbert",
+        # como o Whisper costuma escrever o nome (comparação aproximada também é feita)
+        "wake_words": ["willbert", "wilbert", "uilbert", "wilber", "uilber", "wilbur", "gilbert",
+                       "vilbert", "will bert", "uil bert"],
+        "follow_up_s": 10,         # depois de responder, escuta mais N s sem precisar do nome
+        "audio_url": "rtsp://127.0.0.1:8554/camera",  # áudio da câmera pelo go2rtc
+        "vad_aggressiveness": 2,   # 0-3: quanto maior, mais rigoroso para considerar "fala"
+        "min_speech_ms": 300,
+        "end_silence_ms": 700,     # silêncio que encerra a frase
+        "max_utterance_s": 12,
+        "mute_after_speech_s": 0.6,  # ignora o microfone logo depois de falar (eco do alto-falante)
+        "max_answer_chars": 240,   # resposta curta = fala clara e rápida
+    },
+    "llm": {
+        "url": "http://127.0.0.1:11434",  # Ollama local
+        "model": "",               # o perfil escolhe (qwen3:1.7b / 4b / 8b)
+        "num_predict": 80,
+        "temperature": 0.5,
+        "timeout_s": 25,
+        "keep_alive": "24h",       # mantém o modelo carregado: sem espera na primeira pergunta
+    },
+    "stt": {
+        "model": "",               # faster-whisper: small / large-v3-turbo (o perfil escolhe)
+        "device": "cpu",
+        "compute_type": "int8",
+        "beam_size": 1,
+        "download_root": "/opt/visao/models/whisper",
+        # nomes que o Whisper deve reconhecer (ajuda a escrever certo)
+        "prompt": "Willbert, Victor, Gazziro, Mario, Lucas, laboratório.",
+    },
     "telegram": {
         "token": "",
         "chat_id": "",
@@ -134,17 +173,31 @@ class Section(dict):
             raise AttributeError(key) from None
 
 
-def load(path=None):
+def load(path=None, detect_hardware=True):
+    """Padrões < perfil do hardware < config.toml do usuário."""
     path = path or os.environ.get("VISAO_CONFIG", "/opt/visao/config.toml")
     user = {}
     if os.path.exists(path):
         with open(path, "rb") as f:
             user = tomllib.load(f)
+    profile_vals, profile, hw = {}, None, None
+    if detect_hardware:
+        from . import hardware
+        profile = str(user.get("hardware", {}).get("profile", "auto"))
+        if profile == "auto":
+            hw = hardware.detect()
+            profile = hardware.choose(hw)
+        profile_vals = hardware.PROFILES.get(profile, {})
     cfg = Section()
     for sec, vals in DEFAULTS.items():
         merged = Section(vals)
+        merged.update(profile_vals.get(sec, {}))
         merged.update(user.get(sec, {}))
         cfg[sec] = merged
+    if cfg.detection.get("threads") == "cores":
+        cfg.detection["threads"] = min(os.cpu_count() or 4, 8)
+    cfg.hardware["active"] = profile or "padrão"
+    cfg.hardware["info"] = hw
     return cfg
 
 
