@@ -193,6 +193,13 @@ class Speaker:
         """Fala uma resposta da conversa: gerada na hora e descartada depois (não vai pro cache)."""
         self.say(text, None, "piper" if self.engine() == "piper" else "espeak", temp=True)
 
+    def speak_fixed(self, text):
+        """Resposta que se repete (de nada, ajuda, piadas...): a voz fica no cache em disco,
+        então da segunda vez em diante sai na hora, sem gerar de novo."""
+        engine = "piper" if self.engine() == "piper" else "espeak"
+        path = self._path(text, engine)
+        self.say(text, None, engine, path=path if os.path.exists(path) else None)
+
     def say(self, text, member_id=None, engine=None, path=None, temp=False):
         if not self.enabled:
             return

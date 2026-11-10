@@ -186,4 +186,20 @@ for i in range(3): step(d, day + 11 * 3600 + i, [(100, 1, 0.55)])       # 20h: n
 for i in range(3): step(d, day + 16 * 3600 + i, [(100, 1, 0.55)])       # 01h: mesma noite
 check("um cumprimento por período (manhã, tarde, noite; madrugada = mesma noite)",
       len(d.speaker.said) == 3)
+# 16) saída anotada: some por mais que o intervalo -> evento 'exit' na hora em que foi visto pela última vez
+d = make()
+d.presence.seen(2, t0, 0.6)
+d.presence.touch(2, t0 + 600)
+d.presence.close_stale(t0 + 600 + 31 * 60)
+ev = d.con.execute("SELECT kind, ts, member_id, session_id FROM events WHERE kind = 'exit'").fetchall()
+fim = d.con.execute("SELECT end_ts FROM sessions WHERE member_id = 2").fetchone()[0]
+check("saída anotada na hora em que foi visto pela última vez",
+      len(ev) == 1 and ev[0]["ts"] == t0 + 600 and ev[0]["member_id"] == 2 and fim == t0 + 600)
+# 17) voltou depois de muito tempo: a visita anterior ganha a saída e começa outra
+d = make()
+d.presence.seen(3, t0, 0.6)
+d.presence.seen(3, t0 + 2 * 3600, 0.6)
+n_ex = d.con.execute("SELECT COUNT(*) FROM events WHERE kind = 'exit' AND member_id = 3").fetchone()[0]
+n_s = d.con.execute("SELECT COUNT(*) FROM sessions WHERE member_id = 3").fetchone()[0]
+check("voltou depois de 2 h: uma saída anotada e uma visita nova", n_ex == 1 and n_s == 2)
 print("TUDO OK" if ok else "HÁ FALHAS")

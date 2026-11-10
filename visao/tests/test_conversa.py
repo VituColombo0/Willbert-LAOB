@@ -28,6 +28,10 @@ class FakeSpeaker:
     def speak_now(self, t):
         self.falas.append(t)
 
+    def speak_fixed(self, t):  # frase fixa: voz do cache
+        self.falas.append(t)
+        self.fixas = getattr(self, "fixas", []) + [t]
+
 
 AGORA = datetime(2026, 11, 10, 14, 30)
 
@@ -37,8 +41,10 @@ def fatos():
     return {"agora": AGORA, "membros": ["Gazziro", "Lucas", "Mario", "Victor"],
             "na_camera": ["Victor"], "pessoa_falando": "Victor",
             "presentes": [("Victor", t - 60), ("Lucas", t - 900)],
-            "hoje": [("Victor", t - 5 * 3600), ("Lucas", t - 3 * 3600)],
-            "ultima_vez": {"Victor": t - 60, "Lucas": t - 900, "Mario": t - 3 * 86400}}
+            "hoje": [("Gazziro", t - 6 * 3600), ("Victor", t - 5 * 3600), ("Lucas", t - 3 * 3600)],
+            "ultima_vez": {"Victor": t - 60, "Lucas": t - 900, "Gazziro": t - 2 * 3600, "Mario": t - 3 * 86400},
+            "saidas_hoje": [("Gazziro", t - 2 * 3600)], "ontem": [("Victor", t - 86400 - 4 * 3600)],
+            "dias_semana": {"Victor": 5, "Lucas": 1, "Gazziro": 2}, "visitantes_hoje": 2}
 
 
 cfg = load("/nonexistent.toml", detect_hardware=False)
@@ -63,12 +69,36 @@ casos = [
     ("Willbert, que horas são?", "São duas e meia da tarde."),
     ("Willbert, que dia é hoje?", "Hoje é terça-feira, dez de novembro."),
     ("Willbert, quem está aqui?", "Estão por aqui: Victor e Lucas."),
-    ("Willbert, quem chegou hoje?", "Hoje vi Victor às nove e meia da manhã e Lucas às onze e meia da manhã."),
+    ("Willbert, quem chegou hoje?",
+     "Hoje vi Gazziro às oito e meia da manhã, Victor às nove e meia da manhã e Lucas às onze e meia da manhã."),
     ("Willbert, o Mario veio hoje?", "Hoje não vi o Mario. A última vez foi há três dias."),
     ("Willbert, cadê o Lucas?", "O Lucas está por aqui. Vi ele há quinze minutos."),
     ("Willbert, quem sou eu?", "Você é o Victor!"),
     ("Willbert", "Oi, Victor! Pode falar."),
     ("Willbert, obrigado", "De nada!"),
+    # novas (todas locais, sem LLM)
+    ("Willbert, quem saiu?", "Saíram hoje: Gazziro ao meio-dia e meia."),
+    ("Willbert, quem já foi embora?", "Saíram hoje: Gazziro ao meio-dia e meia."),
+    ("Willbert, o Gazziro já foi embora?", "O Gazziro saiu ao meio-dia e meia."),
+    ("Willbert, o Victor já saiu?", "O Victor ainda está por aqui."),
+    ("Willbert, o Gazziro veio hoje?", "O Gazziro chegou hoje às oito e meia da manhã, e saiu ao meio-dia e meia."),
+    ("Willbert, que horas o Lucas chegou?", "O Lucas chegou hoje às onze e meia da manhã."),
+    ("Willbert, quem chegou primeiro?", "O primeiro a chegar foi o Gazziro, às oito e meia da manhã."),
+    ("Willbert, quem foi o último a chegar?", "O último a chegar foi o Lucas, às onze e meia da manhã."),
+    ("Willbert, quem veio ontem?", "Ontem vi Victor."),
+    ("Willbert, o Mario veio ontem?", "Ontem não vi o Mario."),
+    ("Willbert, quantas vezes o Victor veio essa semana?", "Nos últimos sete dias o Victor veio cinco dias."),
+    ("Willbert, quantas pessoas tem aqui?", "Tem dois membros por aqui agora."),
+    ("Willbert, apareceu algum visitante hoje?", "Hoje a câmera viu alguém que não é membro duas vezes."),
+    ("Willbert, que dia da semana é hoje?", "Hoje é terça-feira."),
+    ("Willbert, que dia é amanhã?", "Amanhã é quarta-feira, onze de novembro."),
+    ("Willbert, em que mês estamos?", "Estamos em novembro de dois mil e vinte e seis."),
+    ("Willbert, quanto é 7 x 8?", "Dá cinquenta e seis."),
+    ("Willbert, quanto é 10 dividido por 4?", "Dá dois vírgula cinco."),
+    ("Willbert, quanto é 2 + 3?", "Dá cinco."),
+    ("Willbert, quem é você?", "Eu sou o Willbert, o assistente do laboratório. Reconheço quem chega e respondo perguntas."),
+    ("Willbert, boa tarde", "Boa tarde, Victor!"),
+    ("Willbert, tudo bem?", "Tudo ótimo por aqui! E com você?"),
 ]
 for pergunta, esperado in casos:
     a.follow_until = 0
@@ -80,6 +110,22 @@ a.follow_until = 0
 check("ignora conversa sem o nome", a.ouviu("passa o café aí", ts=time.time()) is None)
 a.ouviu("Willbert, que horas são?", ts=time.time())
 check("continuação sem repetir o nome", a.ouviu("e que dia é hoje?", ts=time.time()) is not None)
+r = a.ouviu("repete", ts=time.time())
+check("repete a última resposta", r == "Hoje é terça-feira, dez de novembro.", f"-> {r!r}")
+r = a.ouviu("tchau", ts=time.time())
+check("tchau encerra a conversa", r == "Tá bom. Até mais!" and a.follow_until == 0)
+check("depois do tchau, conversa dos outros é ignorada", a.ouviu("que horas são", ts=time.time()) is None)
+a.follow_until = 0
+p1, p2 = a.ouviu("Willbert, conta uma piada"), a.ouviu("Willbert, outra piada")
+check("piadas locais e diferentes", p1 in a.PIADAS and p2 in a.PIADAS and p1 != p2, f"-> {p1!r}")
+check("frases fixas usam a voz do cache", "De nada!" in getattr(sp, "fixas", []) and p1 in sp.fixas)
+check("respostas que mudam não vão para o cache", "São duas e meia da tarde." not in sp.fixas)
+t0 = time.time()
+for _ in range(200):
+    a.follow_until = 0
+    a.ouviu("Willbert, quem saiu hoje?")
+ms = (time.time() - t0) / 200 * 1000
+check(f"resposta pronta em menos de 5 ms ({ms:.2f} ms)", ms < 5)
 
 # --- sem LLM: resposta honesta
 a.follow_until = 0
@@ -128,7 +174,7 @@ check("o que foi falado é o mesmo que foi respondido", sp.falas[-1] == r)
 cfg.llm["url"] = "http://127.0.0.1:9"
 a = Assistente(cfg, sp, fatos, LLM(cfg.llm))
 t0 = time.time()
-r = a.ouviu("Willbert, conta uma piada", ts=time.time())
+r = a.ouviu("Willbert, qual a capital da Itália?", ts=time.time())
 check("LLM fora do ar: resposta de desculpas, rápido", r.startswith("Desculpe") and time.time() - t0 < 3,
       f"-> {r!r}")
 r = a.ouviu("Willbert, que horas são?", ts=time.time())

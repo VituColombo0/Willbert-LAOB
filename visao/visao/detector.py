@@ -170,12 +170,26 @@ class Detector:
             ultima = {names.get(r["member_id"], "?"): r["last"] for r in con.execute(
                 "SELECT member_id, MAX(last_seen_ts) AS last FROM sessions GROUP BY member_id")}
             membros = [r["name"] for r in con.execute("SELECT name FROM members WHERE active = 1 ORDER BY name")]
+            abertos = set(self.presence.open)
+            # saídas de hoje de quem não voltou (a hora é a última vez que foi visto)
+            saidas = [(names.get(r["member_id"], "?"), r["fim"]) for r in con.execute(
+                "SELECT member_id, MAX(end_ts) AS fim FROM sessions WHERE end_ts >= ? "
+                "GROUP BY member_id ORDER BY fim", (day0,)) if r["member_id"] not in abertos]
+            ontem = [(names.get(r["member_id"], "?"), r["first"]) for r in con.execute(
+                "SELECT member_id, MIN(start_ts) AS first FROM sessions WHERE start_ts >= ? AND start_ts < ? "
+                "GROUP BY member_id ORDER BY first", (day0 - 86400, day0))]
+            semana = {names.get(r["member_id"], "?"): r["dias"] for r in con.execute(
+                "SELECT member_id, COUNT(DISTINCT date(start_ts, 'unixepoch', 'localtime')) AS dias "
+                "FROM sessions WHERE start_ts >= ? GROUP BY member_id", (day0 - 6 * 86400,))}
+            visitantes = con.execute("SELECT COUNT(*) FROM events WHERE kind = 'unknown' AND ts >= ? "
+                                     "AND member_id IS NULL", (day0,)).fetchone()[0]
         finally:
             con.close()
         return {"agora": datetime.fromtimestamp(now), "membros": membros,
                 "na_camera": sorted({names.get(t.member_id, "?") for t in vistos}),
                 "pessoa_falando": names.get(falando.member_id) if falando else None,
-                "presentes": presentes, "hoje": hoje, "ultima_vez": ultima}
+                "presentes": presentes, "hoje": hoje, "ultima_vez": ultima,
+                "saidas_hoje": saidas, "ontem": ontem, "dias_semana": semana, "visitantes_hoje": visitantes}
 
     # ------------------------------------------------------------------ loop
     def every(self, name, period):
@@ -279,6 +293,8 @@ class Detector:
                 self.presence.drop_missing(valid)
                 self.tracker.forget_member(valid)
                 self.speaker.prewarm(sorted(self.gallery.names.values()))
+                if self.assistente is not None:  # respostas fixas da conversa: voz pronta em segundo plano
+                    self.speaker.generate_later(self.assistente.frases_fixas())
                 log.info("galeria carregada: %d amostras de %d membros",
                          len(self.gallery), len(set(self.gallery.labels.tolist())))
         if self.every("pending", 3):

@@ -13,8 +13,13 @@ registra quem passou pelo laboratório e agora **conversa**: chame "Willbert" pe
   o grupo. Com placa de vídeo, o cumprimento vem do LLM com contexto ("faz três dias que não te
   via, Mario!"); se o LLM demorar mais de 1,5 s, sai a frase padrão.
 - **Conversa** pela câmera: microfone da Tapo -> detecção de voz -> Whisper -> resposta -> voz.
-  - Perguntas comuns têm resposta **pronta e exata**, instantânea e sem inventar: que horas são,
-    que dia é hoje, quem está aqui, quem chegou hoje, o Mario veio hoje?, cadê o Lucas?, quem sou eu?
+  - Perguntas comuns têm resposta **pronta e exata**, local e instantânea (menos de 1 ms, sem LLM):
+    hora, data, dia da semana, mês/ano, ontem/amanhã; quem está aqui, quantos, quem chegou (primeiro,
+    por último), quem saiu, quem veio ontem; sobre um membro: veio hoje?, que horas chegou?, já foi
+    embora?, quantas vezes veio na semana?; visitantes de hoje; contas simples; piadas; quem é você;
+    oi/bom dia/tudo bem; repete; tchau (encerra a conversa). A voz das respostas fixas fica em cache.
+- **Anota as saídas**: quem some da câmera por mais que `session_gap_min` (30 min) ganha uma
+  "Saída" na página Hoje, com a hora em que foi visto pela última vez.
   - O resto vai para o **LLM local** (Ollama), com os fatos do laboratório e a pedido de respostas
     de no máximo duas frases.
   - Depois de responder, escuta a continuação por 10 s sem precisar chamar pelo nome.

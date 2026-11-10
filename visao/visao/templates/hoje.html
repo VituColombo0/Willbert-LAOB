@@ -48,6 +48,7 @@
         {% if e.kind == 'after_hours' %}movimento no laboratório no horário vigiado
         {% elif e.kind in ('unknown', 'uncertain') %}
           {% if e.member_id %}depois identificado como <b>{{ e.name }}</b>{% elif e.kind == 'unknown' %}pessoa não cadastrada{% if e.details %} <small class="muted">· {{ e.details }}</small>{% endif %}{% else %}rosto não reconhecido <a href="{{ url_for('revisao') }}">(revisar)</a>{% endif %}
+        {% elif e.kind == 'exit' %}<b>{{ e.name or '—' }}</b> saiu <small class="muted">· visto pela última vez; {{ e.details }}</small>
         {% else %}<b>{{ e.name or '—' }}</b>
           {% if e.score %}<small class="muted">certeza {{ '%.2f'|format(e.score) }}</small>{% endif %}
         {% endif %}

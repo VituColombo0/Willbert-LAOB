@@ -177,7 +177,7 @@ def hoje():
     events = [dict(r) for r in c.execute(
         "SELECT e.*, m.name, gm.name AS guess_name FROM events e "
         "LEFT JOIN members m ON m.id = e.member_id LEFT JOIN members gm ON gm.id = e.guess_member_id "
-        "WHERE e.ts >= ? AND e.ts < ? AND e.kind IN ('entry','unknown','uncertain','after_hours') "
+        "WHERE e.ts >= ? AND e.ts < ? AND e.kind IN ('entry','exit','unknown','uncertain','after_hours') "
         "ORDER BY e.ts DESC LIMIT 300", (t0, t1))]
     vistos = {}
     for s in sess:

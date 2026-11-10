@@ -72,6 +72,11 @@ class Presence:
         self.con.execute(
             "UPDATE sessions SET end_ts=?, last_seen_ts=?, sightings=?, best_score=? WHERE id=?",
             (s["last_seen_ts"], s["last_seen_ts"], s["sightings"], s["best_score"], s["id"]))
+        # anota a saída: a hora é a última vez que a pessoa foi vista (não a hora em que percebemos)
+        self.con.execute(
+            "INSERT INTO events(ts, kind, member_id, session_id, details) VALUES(?, 'exit', ?, ?, ?)",
+            (s["last_seen_ts"], s["member_id"], s["id"],
+             f"chegou às {time.strftime('%H:%M', time.localtime(s['start_ts']))}"))
 
 
     def drop_missing(self, valid_ids):
