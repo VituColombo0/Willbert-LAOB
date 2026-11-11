@@ -874,6 +874,8 @@ class Detector:
             return
         if self.gallery.member_sims(t.member_id, emb).size >= dc.enrich_until:
             return  # base do membro já completa
+        if not self.pode_aprender(t.member_id):
+            return
         if float(h["emb"] @ emb) < 0.20:
             return  # pouco parecido com a leitura confirmada: o acompanhamento pode ter trocado de pessoa
         sims = self.gallery.member_sims(t.member_id, h["emb"])
@@ -883,8 +885,18 @@ class Detector:
                         f"ângulo difícil aprendido (era {h['score']:.2f})")
         log.info("aprendeu ângulo difícil de %s (%.2f)", self.gallery.names.get(t.member_id), h["score"])
 
+    def manual_samples(self, member_id):
+        """Amostras cadastradas por gente (foto, câmera, revisão), sem as aprendidas sozinho."""
+        return self.con.execute("SELECT COUNT(*) FROM samples WHERE member_id=? AND source!='auto' "
+                                "AND status='ok'", (member_id,)).fetchone()[0]
+
+    def pode_aprender(self, member_id):
+        return self.manual_samples(member_id) >= int(self.cfg.detection.get("min_manual", 3))
+
     def maybe_auto_enrich(self, member_id, emb, aligned, q, score, ts, boot=False):
         dc = self.cfg.detection
+        if not self.pode_aprender(member_id):
+            return  # poucas fotos cadastradas: um engano viraria amostra do membro errado
         sims = self.gallery.member_sims(member_id, emb)
         if sims.size >= dc.enrich_until:
             return  # base do membro já completa: para de capturar o rosto dele
@@ -1075,24 +1087,6 @@ class Detector:
             self.ouvido.stop()
 
 
-def main():
-    logging.basicConfig(level=os.environ.get("VISAO_LOG", "INFO"),
-                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    logging.getLogger("zeep").setLevel(logging.WARNING)
-    det = Detector(load())
-
-    def _stop(*_):
-        det.stopping = True
-
-    signal.signal(signal.SIGTERM, _stop)
-    signal.signal(signal.SIGINT, _stop)
-    det.run()
-
-
-if __name__ == "__main__":
-    main()
-
-
 def painel_areia(url, dados=None, timeout=5):
     """GET (dados None) ou POST JSON no painel da caixa de areia. Devolve o JSON da resposta (com
     "ok": False quando o painel recusou) ou None se não conseguiu falar com ele."""
@@ -1123,3 +1117,21 @@ def multipart_foto(dados, nome_arquivo):
     corpo = (f"--{borda}\r\nContent-Disposition: form-data; name=\"foto\"; filename=\"{nome_arquivo}\"\r\n"
              "Content-Type: image/jpeg\r\n\r\n").encode() + dados + f"\r\n--{borda}--\r\n".encode()
     return corpo, borda
+
+
+def main():
+    logging.basicConfig(level=os.environ.get("VISAO_LOG", "INFO"),
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    logging.getLogger("zeep").setLevel(logging.WARNING)
+    det = Detector(load())
+
+    def _stop(*_):
+        det.stopping = True
+
+    signal.signal(signal.SIGTERM, _stop)
+    signal.signal(signal.SIGINT, _stop)
+    det.run()
+
+
+if __name__ == "__main__":
+    main()

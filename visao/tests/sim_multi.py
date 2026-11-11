@@ -139,9 +139,16 @@ d.add_sample = lambda mid, *a: added.append(mid)
 d.last_auto = {}
 d.gallery.matrix = np.stack([emb_of(1, 0.9) for _ in range(25)] + [base[2]]).astype(np.float32)
 d.gallery.labels = np.array([1] * 25 + [2])
+def fotos(mid, n):  # amostras cadastradas por gente (foto/câmera)
+    for _ in range(n):
+        d.con.execute("INSERT INTO samples(member_id, source, status, created_at) VALUES(?, 'foto', 'ok', 0)", (mid,))
+fotos(1, 3); fotos(2, 1)
+Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0)
+check("Gazziro com 1 foto cadastrada: não aprende sozinho (engano viraria amostra)", added == [])
+fotos(2, 2)
 Detector.maybe_auto_enrich(d, 1, emb_of(1, 0.6), None, {"q": 0.9}, 0.6, t0)
 Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0)
-check("base completa (25): Victor não é mais capturado; Gazziro (1 amostra) é", added == [2])
+check("base completa (25): Victor não é mais capturado; Gazziro (3 fotos) é", added == [2])
 # 10) modo "1 por dia": na sala há 2 h (passou da meia-noite), não cumprimenta no "novo dia"
 d = make(); d.cfg.greeting["once_per"] = "dia"
 d.presence.seen(1, t0 - 7200, 0.6)

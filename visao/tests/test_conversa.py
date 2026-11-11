@@ -384,4 +384,26 @@ check("falação repetida do Whisper é ignorada", falacao(norm(babel)) and sem.
 check("frase normal não é falação", not falacao(norm("Willbert, liga a caça ao tesouro")))
 check("frase sem nada a ver não vira comando", sem.frase_parecida(norm("o mar estava bonito ontem")) is None)
 check("ajuda sem 'eu penso um pouco'", "penso" not in sem._ajuda("ajuda", None))
+# o detector roda como "python -m visao.detector": tudo o que ele usa tem que estar definido ANTES
+# do main() (funções depois do if __name__ nunca existem no serviço; foi o erro do multipart_foto)
+import ast as _ast, inspect as _inspect, visao.detector as _det
+_arv = _ast.parse(_inspect.getsource(_det))
+_main_i = next(i for i, n in enumerate(_arv.body) if isinstance(n, _ast.If) and "__main__" in _ast.unparse(n.test))
+check("nada definido depois do 'if __name__' no detector", _main_i == len(_arv.body) - 1)
+# aprendizado automático só depois de 3 fotos cadastradas por gente (engano não vira amostra)
+import sqlite3 as _sq
+from visao import db as _db
+from visao.config import Section as _Sec
+_con = _db.connect(":memory:")
+_con.execute("INSERT INTO members(id, name, created_at) VALUES(1, 'Lucas', 0)")
+_d = _det.Detector.__new__(_det.Detector)
+_d.con, _d.cfg = _con, load("/nonexistent.toml", detect_hardware=False)
+def _amostra(fonte):
+    _con.execute("INSERT INTO samples(member_id, source, status, created_at) VALUES(1, ?, 'ok', 0)", (fonte,))
+_amostra("foto")
+for _ in range(9):
+    _amostra("auto")
+check("1 foto (+9 aprendidas sozinho): não aprende mais", not _d.pode_aprender(1))
+_amostra("camera"); _amostra("foto")
+check("3 fotos cadastradas: volta a aprender", _d.pode_aprender(1))
 print("TUDO OK" if ok else "HÁ FALHAS")

@@ -56,6 +56,9 @@ DEFAULTS = {
         "threads": 4,
         "classic_engine": True,    # motor clássico do OpenCV: ~30% mais rápido, mesmos resultados
         "auto_enrich": True,       # aprende novas amostras quando a certeza é alta
+        "min_manual": 3,           # ...mas só depois de o membro ter N fotos cadastradas por gente (foto,
+                                   # câmera ou revisão). Com 1 foto só, um engano (Victor lido como Lucas,
+                                   # 2026-11-11) virava amostra do outro e o erro se reforçava.
         "auto_enrich_score": 0.45,
         "hard_learn": True,        # aprende o ângulo difícil quando o mesmo rosto é confirmado depois
         "auto_enrich_max": 30,     # ao encher, a mais antiga é trocada pela nova
