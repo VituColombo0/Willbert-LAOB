@@ -120,6 +120,11 @@ check("sem a caixa de areia ligada, avisa", a.ouviu("Willbert, grave o meu rosto
 f_sem = dict(fatos(), na_camera=[], pessoa_falando=None)
 ar2 = Assistente(cfg, sp, lambda: f_sem, LLM(cfg.llm), acoes={"areia_rosto": lambda n: True})
 check("ninguém na câmera: pede para olhar", ar2.ouviu("Willbert, grave o meu rosto").startswith("Não estou te vendo"))
+f_visita = dict(fatos(), na_camera=[], pessoa_falando=None, rostos=1)
+pv = []
+ar4 = Assistente(cfg, sp, lambda: f_visita, LLM(cfg.llm), acoes={"areia_rosto": lambda n: pv.append(n) or True})
+check("pessoa não cadastrada também vai para a areia",
+      ar4.ouviu("Willbert, grave o meu rosto") == "Sorria! Em alguns segundos você aparece na areia." and pv == [None])
 ar3 = Assistente(cfg, sp, fatos, LLM(cfg.llm), acoes={"areia_rosto": lambda n: False})
 check("falha ao mandar: avisa", ar3.ouviu("Willbert, grave o meu rosto").startswith("Não consegui mandar"))
 from email.parser import BytesParser

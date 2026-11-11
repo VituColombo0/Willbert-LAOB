@@ -212,7 +212,7 @@ class Assistente:
         acao = self.acoes.get("areia_rosto")
         if acao is None:
             return "A caixa de areia não está ligada a mim agora."
-        if not f.get("na_camera"):
+        if not f.get("na_camera") and not f.get("rostos"):  # vale para quem ainda não é cadastrado
             return "Não estou te vendo. Fica de frente para a câmera e pede de novo."
         if not acao(quem):
             return "Não consegui mandar para a areia agora. Tenta de novo daqui a pouco."

@@ -191,6 +191,7 @@ class Detector:
                 "na_camera": sorted({names.get(t.member_id, "?") for t in vistos}),
                 "pessoa_falando": names.get(falando.member_id) if falando else None,
                 "presentes": presentes, "hoje": hoje, "ultima_vez": ultima,
+                "rostos": sum(1 for t in tracks if now - t.last_ts < 2.5),  # qualquer rosto, cadastrado ou não
                 "saidas_hoje": saidas, "ontem": ontem, "dias_semana": semana, "visitantes_hoje": visitantes}
 
     # ------------------------------------------------- caixa de areia (Projetor-LAOB)

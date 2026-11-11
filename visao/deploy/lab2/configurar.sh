@@ -33,16 +33,20 @@ read -rp "   usuário da conta da câmera: " CAM_USER
 CAM_PASS=$(pede_senha "   senha da conta da câmera")
 echo
 echo "2) Conta TP-Link/Tapo (a do login no app). Serve para o Willbert falar e ouvir pela câmera."
-echo "   Precisa de 'Compatibilidade com terceiros' ligada no app. Enter para pular (fica só vídeo)."
+echo "   Precisa de 'Compatibilidade com terceiros' ligada no app. Enter = manter a que já está."
 TAPO_PASS=$(pede_senha "   senha da conta Tapo" opcional)
 echo
 echo "3) Site do Willbert (http://<lab2>:8080), onde se cadastram os membros"
-read -rp "   usuário do site [admin]: " WEB_USER; WEB_USER=${WEB_USER:-admin}
-while :; do
-  WEB_PASS=$(pede_senha "   senha do site (mínimo 6)")
-  [ ${#WEB_PASS} -ge 6 ] && break
-  echo "   curta demais" >&2
-done
+WEB_PASS=""
+read -rp "   trocar o usuário/senha do site? [s/N]: " TROCA_SITE
+if [ "${TROCA_SITE,,}" = s ]; then
+  read -rp "   usuário do site [admin]: " WEB_USER; WEB_USER=${WEB_USER:-admin}
+  while :; do
+    WEB_PASS=$(pede_senha "   senha do site (mínimo 6)")
+    [ ${#WEB_PASS} -ge 6 ] && break
+    echo "   curta demais" >&2
+  done
+fi
 echo
 
 cp -p "$CFG" "$CFG.antes-configurar"
@@ -70,7 +74,8 @@ def troca(secao, chave, valor):
 troca("camera", "host", os.environ["IP"])
 troca("camera", "user", os.environ["CAM_USER"])
 troca("camera", "password", os.environ["CAM_PASS"])
-troca("greeting", "tapo_cloud_password", os.environ["TAPO_PASS"])
+if os.environ["TAPO_PASS"]:  # vazio = manter a senha da conta Tapo que já estava
+    troca("greeting", "tapo_cloud_password", os.environ["TAPO_PASS"])
 tmp = p + ".tmp"
 with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o640), "w") as f:
     f.write(s)
@@ -87,13 +92,30 @@ print('   câmera', c.camera.host, '· usuário', c.camera.user, '· senha', 'ok
       '· conta Tapo', 'ok' if c.greeting.tapo_cloud_password else 'não informada (só vídeo)')
 " || { echo "config inválida; voltando a anterior"; cp -p "$CFG.antes-configurar" "$CFG"; exit 1; }
 
-printf '%s\n' "$WEB_PASS" | visao-cli senha --stdin --usuario "$WEB_USER" >/dev/null
+if [ -n "$WEB_PASS" ]; then
+  printf '%s\n' "$WEB_PASS" | visao-cli senha --stdin --usuario "$WEB_USER" >/dev/null
+  echo "   site: usuário $WEB_USER, senha definida"
+else
+  echo "   site: usuário e senha mantidos"
+fi
 unset WEB_PASS
-echo "   site: usuário $WEB_USER, senha definida"
 
 visao-cli go2rtc-config --saida /opt/visao/go2rtc.yaml >/dev/null
 chown root:visao /opt/visao/go2rtc.yaml; chmod 640 /opt/visao/go2rtc.yaml
 systemctl restart visao-web
+echo
+echo "4) Teste da conta da câmera (UMA tentativa só: a Tapo bloqueia depois de várias falhas)"
+URL=$(VISAO_CONFIG=$CFG PYTHONPATH=/opt/visao/app "$PY" -c "
+from visao.config import load, rtsp_url
+print(rtsp_url(load('$CFG').camera, 'sub'))")
+if timeout 20 ffprobe -v error -rtsp_transport tcp -select_streams v:0 -show_entries stream=width,height \
+     -of csv=p=0 "$URL" 2>/dev/null | grep -q '[0-9]'; then
+  echo "   conta da câmera OK: o vídeo chegou"
+else
+  echo "   a câmera NÃO aceitou (usuário/senha da 'Conta da câmera' ou câmera bloqueada por falhas recentes)"
+fi
+unset URL
+
 echo
 echo "Pronto. O Willbert continua DESLIGADO."
 echo "Avise o Claude para testar a câmera (uma tentativa só) e cadastrar os membros."
