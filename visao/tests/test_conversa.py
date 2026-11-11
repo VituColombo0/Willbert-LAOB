@@ -442,7 +442,7 @@ _g.tracker = type("T", (), {"tracks": {1: Track(1, Face(_row), 0, 0, member_id=4
 _g.gallery = type("G", (), {"names": {4: "Lucas"}})()
 _falas, _fotos = [], []
 _g.speaker = type("S", (), {"speak_fixed": lambda self, t: _falas.append(t)})()
-_g.foto_para_areia = lambda nome: _fotos.append(nome) or True
+_g.foto_para_areia = lambda nome, tid=None: _fotos.append(nome) or True
 for i in range(6):
     _g.tracker.tracks[1].last_ts = 10 + 0.3 * i
     _g.check_gesture(None, 10 + 0.3 * i)

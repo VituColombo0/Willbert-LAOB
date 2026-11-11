@@ -216,14 +216,15 @@ class Detector:
                 "saidas_hoje": saidas, "ontem": ontem, "dias_semana": semana, "visitantes_hoje": visitantes}
 
     # ------------------------------------------------- caixa de areia (Projetor-LAOB)
-    def foto_para_areia(self, nome):
+    def foto_para_areia(self, nome, track_id=None):
         """'Willbert, grave o meu rosto': depois do "Sorria!", fotografa quem está mais perto da
         câmera e manda para o painel da caixa de areia, que recorta e projeta. Volta na hora;
         o resto roda em segundo plano para não travar a conversa nem o reconhecimento."""
         url = str(self.cfg.assistant.get("areia_url") or "")
         if not url:
             return False
-        threading.Thread(target=self._foto_para_areia, args=(nome, url), daemon=True, name="foto-areia").start()
+        threading.Thread(target=self._foto_para_areia, args=(nome, url, track_id), daemon=True,
+                         name="foto-areia").start()
         return True
 
     def areia(self, caminho, dados=None):
@@ -246,33 +247,62 @@ class Detector:
         threading.Thread(target=manda, daemon=True, name="areia").start()
         return True
 
-    def quadro_alta(self, bytes_fim=1_500_000):
-        """Último quadro do vídeo principal (1080p) que o gravador guarda em pedaços na RAM.
-        Não abre outra conexão com a câmera (a Tapo aceita poucas). Lê só o final dos pedaços
-        mais recentes (o .ts se ressincroniza sozinho) e decodifica até o último quadro; o
-        "-sseof" do ffmpeg 4.4 não funciona em .ts. None se não der."""
+    def rosto_perto(self, img, esperado):
+        """Rosto na imagem grande mais perto de onde ele deveria estar (x, y, l, a). Usa um
+        detector próprio desta thread (o da análise não pode ser usado ao mesmo tempo)."""
+        if getattr(self, "_yunet_foto", None) is None:
+            caminho = os.path.join(self.cfg.storage.models_dir, "face_detection_yunet_2023mar.onnx")
+            if not os.path.exists(caminho):
+                return None
+            self._yunet_foto = cv2.FaceDetectorYN.create(caminho, "", (320, 320), 0.6)
+        s = min(1.0, 960 / img.shape[1])
+        peq = cv2.resize(img, (int(img.shape[1] * s), int(img.shape[0] * s))) if s < 1 else img
+        self._yunet_foto.setInputSize((peq.shape[1], peq.shape[0]))
+        _, fs = self._yunet_foto.detect(peq)
+        if fs is None or not len(fs):
+            return None
+        caixas = [tuple(float(v) / s for v in f[:4]) for f in fs]
+        if esperado is None:
+            return max(caixas, key=lambda c: c[2])
+        ex, ey, ew, eh = esperado
+        perto = [c for c in caixas
+                 if abs(c[0] + c[2] / 2 - ex - ew / 2) < 1.5 * ew and abs(c[1] + c[3] / 2 - ey - eh / 2) < 1.5 * eh]
+        return min(perto, key=lambda c: abs(c[0] - ex) + abs(c[1] - ey)) if perto else None
+
+    def quadro_alta(self):
+        """Último quadro do vídeo principal (1080p) que o gravador guarda em pedaços de 10 s na
+        RAM. Não abre outra conexão com a câmera (a Tapo aceita poucas). O ffprobe acha o último
+        quadro-chave do pedaço mais novo (~0,2 s; a Tapo manda um a cada ~2 s) e o ffmpeg
+        decodifica só dali até o fim, gravando só o último quadro. (Ler só o final do arquivo
+        dava quadros quebrados, com manchas verdes; decodificar o pedaço inteiro levava 14 s.)"""
         if self.rec is None:
             return None
         segs = sorted(glob.glob(os.path.join(self.rec.dir, "seg_*.ts")), key=os.path.getmtime)[-2:]
-        dados = b""
-        for seg in reversed(segs):  # o mais novo pode ter acabado de começar: completa com o anterior
-            try:
-                with open(seg, "rb") as f:
-                    f.seek(0, os.SEEK_END)
-                    n = min(f.tell(), bytes_fim - len(dados))
-                    f.seek(-n, os.SEEK_END)
-                    dados = f.read(n) + dados
-            except OSError:
-                continue
-            if len(dados) >= bytes_fim:
-                break
-        if len(dados) < 10_000:
+        if not segs:
             return None
-        saida = os.path.join(self.rec.dir, f"quadro_{os.getpid()}.jpg")
+        seg = segs[-1] if os.path.getsize(segs[-1]) >= 50_000 or len(segs) == 1 else segs[-2]
+        saida = os.path.join(self.rec.dir, f"quadro_{os.getpid()}.bmp")
         try:
-            r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-y", "-f", "mpegts", "-i", "pipe:0",
-                                "-an", "-q:v", "2", "-update", "1", "-f", "image2", saida],
-                               input=dados, capture_output=True, timeout=15)
+            pk = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                 "packet=pts_time,flags", "-of", "csv=p=0", seg],
+                                capture_output=True, text=True, timeout=10).stdout
+            pacotes = []
+            for linha in pk.split():
+                partes = linha.split(",")
+                try:
+                    pacotes.append((float(partes[0]), partes[1].startswith("K")))
+                except (ValueError, IndexError):
+                    pass
+            if not pacotes:
+                return None
+            # os tempos do .ts não começam em 0 (o mpegts soma ~1,4 s) e o -ss conta do início
+            inicio = min(t for t, _ in pacotes)
+            fim = max(t for t, _ in pacotes)
+            chave = max((t for t, k in pacotes if k), default=inicio)
+            r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-y", "-ss", f"{chave - inicio:.3f}", "-i", seg, "-an",
+                                "-vf", f"select=gte(t\\,{max(0.0, fim - chave - 0.15):.3f})",
+                                "-update", "1", "-f", "image2", "-c:v", "bmp", saida],
+                               capture_output=True, timeout=15)
             img = cv2.imread(saida) if os.path.exists(saida) else None
             if img is None:
                 log.warning("quadro em 1080p: ffmpeg não gerou imagem (código %s)", r.returncode)
@@ -286,7 +316,7 @@ class Detector:
             except OSError:
                 pass
 
-    def _foto_para_areia(self, nome, url):
+    def _foto_para_areia(self, nome, url, track_id=None):
         import urllib.request
         t0 = time.time()
         time.sleep(1.0)  # o "Sorria!" entra na fila de fala
@@ -299,19 +329,32 @@ class Detector:
             return
         agora = time.time()
         vistos = [t for t in list(self.tracker.tracks.values()) if agora - t.last_ts < 4.0]
-        # a análise usa o vídeo menor (720p); a foto sai do 1080p que o gravador já guarda na RAM
+        # quem pediu (o gesto diz qual rosto foi); senão, o rosto mais perto da câmera
+        quem = self.tracker.tracks.get(track_id) if track_id is not None else None
+        if quem is None and vistos:
+            quem = max(vistos, key=lambda t: t.face.w)
+        # a análise usa o vídeo menor (720p); a foto sai do 1080p que o gravador já guarda na RAM,
+        # com o rosto achado de novo nele (a pessoa pode ter se mexido durante a contagem)
+        base, caixa = frame, (quem.face.box if quem is not None else None)
         alta = self.quadro_alta()
-        base, escala = (alta, alta.shape[1] / frame.shape[1]) if alta is not None else (frame, 1.0)
+        if alta is not None:
+            escala = alta.shape[1] / frame.shape[1]
+            esperado = tuple(v * escala for v in caixa) if caixa else None
+            achado = self.rosto_perto(alta, esperado)
+            if achado is not None:
+                base, caixa = alta, achado
+            else:
+                log.info("foto para a areia: rosto não achado no 1080p; usando o vídeo de análise")
         recorte = base
-        if vistos:  # cabeça e ombros de quem está mais perto; o Projetor-LAOB acerta o enquadramento
-            x, y, w, h = (v * escala for v in max(vistos, key=lambda t: t.face.w).face.box)
+        if caixa:  # cabeça e ombros; o Projetor-LAOB acerta o enquadramento
+            x, y, w, h = caixa
             cx, cy, lado = x + w / 2, y + h / 2, max(w, h)
             x0, x1 = int(max(0, cx - 1.8 * lado)), int(min(base.shape[1], cx + 1.8 * lado))
             y0, y1 = int(max(0, cy - 1.6 * lado)), int(min(base.shape[0], cy + 2.6 * lado))
             recorte = base[y0:y1, x0:x1]
         recorte = melhora_foto(recorte)
         log.info("foto para a areia: %dx%d (fonte %s)", recorte.shape[1], recorte.shape[0],
-                 "1080p" if alta is not None else "vídeo de análise")
+                 "1080p" if base is alta else "vídeo de análise")
         ok, jpg = cv2.imencode(".jpg", recorte, [cv2.IMWRITE_JPEG_QUALITY, 95])
         if not ok:
             return
@@ -431,7 +474,7 @@ class Detector:
             nome = self.gallery.names.get(quem.member_id) if quem.member_id is not None else None
             log.info("gesto de foto (%s): mandando para a areia", nome or "pessoa não identificada")
             self.speaker.speak_fixed(gc.get("phrase") or "Sorria!")
-            if not self.foto_para_areia(nome):
+            if not self.foto_para_areia(nome, quem.id):
                 log.warning("gesto: a caixa de areia não está configurada (assistant.areia_url)")
 
     def update_sw_motion(self, frame, now):
