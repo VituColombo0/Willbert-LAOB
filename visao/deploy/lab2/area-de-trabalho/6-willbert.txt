@@ -6,7 +6,15 @@ anota quem chegou e quem saiu, e conversa quando é chamado.
 Ele fica DESLIGADO até alguém ligar.
 
 
-LIGAR E DESLIGAR
+LIGAR E DESLIGAR (PELOS ATALHOS - MAIS FÁCIL)
+---------------------------------------------
+- Para ligar: dê dois cliques em "Ligar Willbert" (aguarde uns 30 s)
+- Para desligar: dê dois cliques em "Desligar Willbert"
+- Para ver se está ligado: dê dois cliques em "Ver estado do Willbert"
+- Para abrir o site de membros: dê dois cliques em "Abrir site do Willbert"
+
+
+OU PELO TERMINAL
 ----------------
 1. Abra o Terminal: aperte Ctrl + Alt + T
 2. Digite o comando e aperte Enter:
@@ -40,12 +48,12 @@ FOTO NA CAIXA DE AREIA
 Olhe para a câmera e diga:
     "Willbert, grave o meu rosto"
 Ele fala "Sorria!", tira a foto e em uns 15 segundos você aparece na areia.
-(Para voltar a areia ao normal: areia-topografia)
+(Para voltar a areia ao normal: use "Voltar para a topografia" na pasta 1 ou rode: areia-topografia)
 
 
 SITE DO WILLBERT (cadastro de membros e histórico)
 --------------------------------------------------
-  No laboratório: http://192.168.0.139:8080
+  No laboratório: http://192.168.0.139:8080 (ou neste computador: http://localhost:8080)
   De fora (com Tailscale): http://100.114.194.28:8080
   Usuário e senha: com o Victor.
   Lá dá para cadastrar membros (com fotos ou pela câmera) e ver quem
@@ -54,8 +62,8 @@ SITE DO WILLBERT (cadastro de membros e histórico)
 
 SE ALGO DER ERRADO
 ------------------
-- Ele não responde: confira com  willbert estado  e, se estiver
-  desligado, rode  willbert ligar
+- Ele não responde: confira com "Ver estado do Willbert" e, se estiver
+  desligado, use "Ligar Willbert"
 - Ele não reconhece alguém: a pessoa precisa estar cadastrada no site.
-- A câmera parou: rode  willbert testar-camera  UMA vez só
+- A câmera parou: rode no terminal:  willbert testar-camera  UMA vez só
   (a câmera bloqueia o acesso se testar várias vezes seguidas).

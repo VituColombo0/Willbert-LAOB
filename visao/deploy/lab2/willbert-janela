@@ -1,0 +1,21 @@
+#!/bin/bash
+# Atalhos de dois cliques do Willbert: liga/desliga com notificação e mostra o estado numa janela.
+#   willbert-janela ligar | desligar | estado
+acao=${1:-estado}
+avisa() { notify-send -i "$1" "Willbert" "$2" 2>/dev/null || true; }
+erro() { zenity --error --title="Willbert" --width=440 --text="$1" 2>/dev/null || avisa dialog-error "$1"; exit 1; }
+case "$acao" in
+  ligar)
+    avisa system-run "Ligando o Willbert... leva uns 30 segundos."
+    saida=$(sudo -n /usr/local/sbin/willbert-controle ligar 2>&1) || erro "Não consegui ligar:\n\n${saida//</&lt;}"
+    avisa face-smile "Willbert ligado! Chame \"Willbert\" perto da câmera." ;;
+  desligar)
+    saida=$(sudo -n /usr/local/sbin/willbert-controle desligar 2>&1) || erro "Não consegui desligar:\n\n${saida//</&lt;}"
+    avisa system-shutdown "Willbert desligado." ;;
+  estado)
+    saida=$(sudo -n /usr/local/sbin/willbert-controle estado 2>&1 | head -n 1)
+    if printf '%s' "$saida" | grep -q "visao-detector=active"; then txt="O Willbert está LIGADO."
+    else txt="O Willbert está DESLIGADO. Para ligar: dois cliques em \"Ligar Willbert\"."; fi
+    zenity --info --title="Estado do Willbert" --width=460 --text="$txt\n\n<small>${saida//</&lt;}</small>" 2>/dev/null ;;
+  *) echo "uso: willbert-janela ligar|desligar|estado"; exit 2 ;;
+esac

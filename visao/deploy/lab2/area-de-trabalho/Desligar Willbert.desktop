@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Desligar Willbert
+Comment=Desliga o Willbert
+Exec=/home/laob/.local/bin/willbert-janela desligar
+Icon=system-shutdown
+Terminal=false
