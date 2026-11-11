@@ -119,6 +119,7 @@ class Detector:
         # fundo vazio da cena (câmera fixa): o que já estava lá não entra na foto da areia
         self.fundo = foto_mod.FundoCena(arquivo=os.path.join(self.data, "fundo-vazio.jpg"))
         self._fundo_ocupado = False
+        self._inicio = time.time()   # o fundo vazio só depois de observar um tempo (ver cuida_do_fundo)
         gc = cfg.get("gesture") or {}
         if gc.get("enabled") and os.path.exists(str(gc.get("model") or "")):
             try:
@@ -331,6 +332,8 @@ class Detector:
         fundo, tudo bem). Se a câmera girou, as antigas não servem mais."""
         if self.fundo is None or self.rec is None or self._fundo_ocupado:
             return
+        if now - getattr(self, "_inicio", 0.0) < 90:
+            return   # recém-ligado: ainda não sabe se tem alguém perto (a pessoa entraria no "fundo")
         if self.onvif.ptz_recent(5):
             self.fundo.esquece()
             return
