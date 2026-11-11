@@ -2,6 +2,7 @@
     python -m tests.test_conversa
 """
 import json
+import numpy as np
 import threading
 import time
 from datetime import datetime
@@ -398,6 +399,8 @@ _con = _db.connect(":memory:")
 _con.execute("INSERT INTO members(id, name, created_at) VALUES(1, 'Lucas', 0)")
 _d = _det.Detector.__new__(_det.Detector)
 _d.con, _d.cfg = _con, load("/nonexistent.toml", detect_hardware=False)
+check("padrão: aprende desde a 1ª foto cadastrada", int(_d.cfg.detection.min_manual) == 1)
+_d.cfg.detection["min_manual"] = 3   # modo cauteloso
 def _amostra(fonte):
     _con.execute("INSERT INTO samples(member_id, source, status, created_at) VALUES(1, ?, 'ok', 0)", (fonte,))
 _amostra("foto")
@@ -406,4 +409,47 @@ for _ in range(9):
 check("1 foto (+9 aprendidas sozinho): não aprende mais", not _d.pode_aprender(1))
 _amostra("camera"); _amostra("foto")
 check("3 fotos cadastradas: volta a aprender", _d.pode_aprender(1))
+# --- gesto: mãos abertas ao lado do rosto tiram a foto da areia (casos medidos no lab2)
+from visao.gesto import Gesto, ancoras, maos_ao_lado
+from visao.faces import Face
+check("detector de palmas: 2016 âncoras", ancoras().shape == (2016, 2))
+rosto = (950, 450, 160, 200)   # x, y, largura, altura (quadro 1920x1080, medido às 18:35)
+pal = lambda cx, cy: (cx - 60, cy - 60, cx + 60, cy + 60, 0.95)
+check("palma de cada lado, na altura do rosto: gesto", maos_ao_lado(rosto, [pal(730, 580), pal(1340, 600)]))
+check("uma palma só: não é gesto", not maos_ao_lado(rosto, [pal(730, 580)]))
+check("as duas do mesmo lado: não é gesto", not maos_ao_lado(rosto, [pal(730, 580), pal(800, 560)]))
+check("mãos lá embaixo (na mesa): não é gesto", not maos_ao_lado(rosto, [pal(730, 900), pal(1340, 900)]))
+check("mãos longe do rosto (outra pessoa): não é gesto", not maos_ao_lado(rosto, [pal(100, 580), pal(1800, 600)]))
+g = Gesto(segurar_s=1.5, pausa_s=20)
+seq = [g.leitura(True, 100 + 0.5 * i) for i in range(4)]
+check("segurando 1,5 s dispara uma vez", seq == [False, False, False, True], f"{seq}")
+check("continuar segurando não dispara de novo", not any(g.leitura(True, 102 + 0.5 * i) for i in range(10)))
+g2 = Gesto(segurar_s=1.5)
+g2.leitura(True, 0); g2.leitura(True, 0.5); g2.leitura(False, 1.0)
+check("uma leitura falhada no meio não zera", g2.leitura(True, 1.2) is False and g2.leitura(True, 1.6) is True)
+g3 = Gesto(segurar_s=1.5)
+g3.leitura(True, 0); g3.leitura(False, 2.0)
+check("mão abaixada por mais tempo zera", g3.leitura(True, 2.1) is False and g3.leitura(True, 3.0) is False)
+# detector: o gesto chama a foto da areia e fala a contagem
+_g = _det.Detector.__new__(_det.Detector)
+_g.cfg = load("/nonexistent.toml", detect_hardware=False)
+_g.gesto, _g.last_palm = Gesto(segurar_s=1.0, pausa_s=20), 0.0
+_g.palmas = type("P", (), {"detecta": lambda self, f: [pal(730, 580), pal(1340, 600)]})()
+from visao.tracker import Track
+_row = np.array([950, 450, 160, 200] + [0] * 10 + [0.9], np.float32)
+_g.tracker = type("T", (), {"tracks": {1: Track(1, Face(_row), 0, 0, member_id=4)}})()
+_g.gallery = type("G", (), {"names": {4: "Lucas"}})()
+_falas, _fotos = [], []
+_g.speaker = type("S", (), {"speak_fixed": lambda self, t: _falas.append(t)})()
+_g.foto_para_areia = lambda nome: _fotos.append(nome) or True
+for i in range(6):
+    _g.tracker.tracks[1].last_ts = 10 + 0.3 * i
+    _g.check_gesture(None, 10 + 0.3 * i)
+check("gesto do Lucas: fala a contagem e manda a foto dele", _fotos == ["Lucas"] and _falas == [_g.cfg.gesture.phrase],
+      f"{_fotos} {_falas}")
+_g.tracker.tracks[1].face = Face(np.array([950, 450, 30, 36] + [0] * 10 + [0.9], np.float32))
+_g.gesto = Gesto(segurar_s=1.0); _fotos.clear()
+for i in range(6):
+    _g.check_gesture(None, 30 + 0.3 * i)
+check("rosto pequeno (longe da câmera): não procura o gesto", _fotos == [])
 print("TUDO OK" if ok else "HÁ FALHAS")

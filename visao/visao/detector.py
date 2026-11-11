@@ -111,8 +111,26 @@ class Detector:
         self.speaker.start()
         # conversa pela câmera (PC): ouvido -> assistente -> LLM/respostas prontas -> voz
         self.assistente = self.ouvido = None
-        if cfg.assistant.enabled:
+        self.gesto = self.palmas = None
+        self.last_palm = 0.0
+        gc = cfg.get("gesture") or {}
+        if gc.get("enabled") and os.path.exists(str(gc.get("model") or "")):
+            try:
+                from .gesto import Gesto, Palmas
+                self.palmas = Palmas(gc["model"])
+                self.gesto = Gesto(float(gc.get("hold_s", 1.5)), float(gc.get("pause_s", 20)))
+                self.speaker.generate_later([gc.get("phrase") or "Sorria!"])
+                log.info("gesto ligado: mãos abertas ao lado do rosto por %.1f s tiram a foto da areia",
+                         float(gc.get("hold_s", 1.5)))
+            except Exception:
+                log.exception("gesto desligado: não consegui carregar o detector de mãos")
+                self.gesto = self.palmas = None
+        elif gc.get("enabled"):
+            log.warning("gesto desligado: falta o modelo %s", gc.get("model"))
+        if cfg.assistant.enabled and (self.gesto is None or gc.get("keep_voice")):
             self._start_assistant(cfg)
+        elif cfg.assistant.enabled:
+            log.info("conversa por voz desligada: o gesto substitui (gesture.keep_voice = true para ter os dois)")
         self.greet_batch = None  # cumprimento esperando a janela para juntar o grupo
         self.greeted = {}       # member_id -> dia em que já foi cumprimentado (ou tentativa recente)
         self._temp, self._temp_ts, self._thermal_level = 0.0, 0.0, 0
@@ -284,6 +302,10 @@ class Detector:
                 continue
             last_seq = seq
             self.update_sw_motion(frame, now)
+            try:
+                self.check_gesture(frame, now)
+            except Exception:
+                log.exception("erro no gesto")
             self.check_security(frame, now)
             mode = self.mode = self.activity(now)
             # gente chegando (ou cumprimento esperando): CPU toda para reconhecer e falar
@@ -339,6 +361,30 @@ class Detector:
         if self.tracker.alive(now, self.cfg.detection.track_ttl_s):
             return "acompanhando"
         return "ocioso"
+
+    def check_gesture(self, frame, now):
+        """Mãos abertas ao lado do rosto, seguradas: "Foto em três, dois, um... Sorria!" e a foto
+        de quem fez o gesto vai para a areia (o mesmo caminho do "grave o meu rosto")."""
+        if self.gesto is None:
+            return
+        gc = self.cfg.gesture
+        perto = [t for t in self.tracker.tracks.values()
+                 if now - t.last_ts < 3 and t.face.w >= float(gc.get("min_face_px", 50))]
+        if not perto:
+            self.gesto.leitura(False, now)
+            return
+        if now - self.last_palm < float(gc.get("interval_s", 0.25)):
+            return
+        self.last_palm = now
+        from .gesto import maos_ao_lado
+        palmas = self.palmas.detecta(frame)
+        quem = next((t for t in perto if maos_ao_lado(t.face.box, palmas)), None)
+        if self.gesto.leitura(quem is not None, now):
+            nome = self.gallery.names.get(quem.member_id) if quem.member_id is not None else None
+            log.info("gesto de foto (%s): mandando para a areia", nome or "pessoa não identificada")
+            self.speaker.speak_fixed(gc.get("phrase") or "Sorria!")
+            if not self.foto_para_areia(nome):
+                log.warning("gesto: a caixa de areia não está configurada (assistant.areia_url)")
 
     def update_sw_motion(self, frame, now):
         # amostragem simples (1 a cada 8 px): barata e sem acionar o pool de threads do OpenCV

@@ -24,47 +24,27 @@ OU PELO TERMINAL
     willbert estado         mostra se está ligado
 
 
-COMO CONVERSAR
---------------
-Fale perto da câmera, começando pelo nome dele: "Willbert, ..."
-Depois que ele responde, dá para continuar uns 10 segundos sem repetir
-o nome. Para encerrar: "tchau".
-
-  Perguntas que ele responde na hora:
-    "Willbert, que horas são?"            "Willbert, que dia é hoje?"
-    "Willbert, quem está aqui?"           "Willbert, quem chegou hoje?"
-    "Willbert, quem saiu?"                "Willbert, quem chegou primeiro?"
-    "Willbert, o Mario veio hoje?"        "Willbert, que horas o Lucas chegou?"
-    "Willbert, o Gazziro já foi embora?"  "Willbert, quem veio ontem?"
-    "Willbert, quantas vezes o Victor veio essa semana?"
-    "Willbert, apareceu algum visitante hoje?"
-    "Willbert, quanto é 7 vezes 8?"       "Willbert, conta uma piada"
-    "Willbert, repete"                     "Willbert, o que você sabe fazer?"
-  Ele só entende os comandos desta lista (não conversa livremente): responde
-  na hora e, se não entender, diz o que dá para pedir. Se ele ouvir um pouco
-  errado, tudo bem: ele procura o comando mais parecido.
+O QUE ELE FAZ
+-------------
+- Quando um membro chega (Gazziro, Mario, Victor, Lucas), ele cumprimenta:
+    "Boa tarde, Lucas! Que bom te ver."   "Bom dia, Mario e Victor!"
+    "Boa tarde a todos!" (3 pessoas ou mais)
+  Quem não é membro não é cumprimentado.
+- Ele NÃO ouve mais (não precisa falar com ele): a foto é pelo gesto abaixo.
 
 
-FOTO NA CAIXA DE AREIA
-----------------------
-Olhe para a câmera e diga:
-    "Willbert, grave o meu rosto"
-Ele fala "Sorria!", tira a foto e em uns 15 segundos você aparece na areia.
-(Para voltar a areia ao normal: use "Voltar para a topografia" na pasta 1 ou rode: areia-topografia)
+FOTO NA CAIXA DE AREIA (O GESTO)
+--------------------------------
+1. Fique de frente para a câmera, a uns 1 a 2 metros.
+2. Abra as DUAS MÃOS, uma de cada lado do rosto, com as palmas para a câmera.
+3. Segure assim por uns 2 segundos.
+4. Ele fala "Foto em três... dois... um... Sorria!", tira a foto e em uns
+   15 segundos você aparece na areia.
+Depois de uma foto, espere uns 20 segundos para fazer outra.
+(Para voltar a areia ao normal: "Voltar para a topografia" na pasta 1, ou: areia-topografia)
 
-
-BRINCADEIRAS DA CAIXA DE AREIA PELA VOZ
----------------------------------------
-    "Willbert, coloca o tema vulcão"        (também: neve, Marte, deserto, oceano,
-                                              arco-íris, mapa, clássico)
-    "Willbert, liga a caça ao tesouro"      "Willbert, quantos tesouros acharam?"
-    "Willbert, solta os peixes"             "Willbert, coloca os carrinhos"
-    "Willbert, solta os peixes e os carrinhos"
-    "Willbert, enterra um triceratops"      (ou T-Rex, pterodáctilo, pegada)
-    "Willbert, vamos brincar de labirinto de água"
-    "Willbert, outro labirinto"             "Willbert, a água chegou no labirinto?"
-    "Willbert, para as brincadeiras"        "Willbert, volta para a topografia"
-Ele responde na hora e a areia muda em um ou dois segundos.
+As brincadeiras da areia (cores, tesouro, peixes, labirinto...) são pelos
+atalhos das pastas 1 a 8 ou pelo celular: http://100.114.194.28:8090
 
 
 SITE DO WILLBERT (cadastro de membros e histórico)
@@ -78,8 +58,9 @@ SITE DO WILLBERT (cadastro de membros e histórico)
 
 SE ALGO DER ERRADO
 ------------------
-- Ele não responde: confira com "Ver estado do Willbert" e, se estiver
+- O gesto não tira a foto: confira com "Ver estado do Willbert" e, se estiver
   desligado, use "Ligar Willbert"
-- Ele não reconhece alguém: a pessoa precisa estar cadastrada no site.
+- Ele não reconhece alguém: a pessoa precisa estar cadastrada no site. Ele
+  também aprende sozinho com o tempo (até 25 fotos de cada um) e melhora.
 - A câmera parou: rode no terminal:  willbert testar-camera  UMA vez só
   (a câmera bloqueia o acesso se testar várias vezes seguidas).

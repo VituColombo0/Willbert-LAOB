@@ -143,12 +143,13 @@ def fotos(mid, n):  # amostras cadastradas por gente (foto/câmera)
     for _ in range(n):
         d.con.execute("INSERT INTO samples(member_id, source, status, created_at) VALUES(?, 'foto', 'ok', 0)", (mid,))
 fotos(1, 3); fotos(2, 1)
+d.cfg.detection["min_manual"] = 3   # modo cauteloso
 Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0)
-check("Gazziro com 1 foto cadastrada: não aprende sozinho (engano viraria amostra)", added == [])
-fotos(2, 2)
+check("modo cauteloso (min_manual 3): Gazziro com 1 foto não aprende sozinho", added == [])
+d.cfg.detection["min_manual"] = 1   # padrão: aprende desde o cadastro
 Detector.maybe_auto_enrich(d, 1, emb_of(1, 0.6), None, {"q": 0.9}, 0.6, t0)
 Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0)
-check("base completa (25): Victor não é mais capturado; Gazziro (3 fotos) é", added == [2])
+check("base completa (25): Victor não é mais capturado; Gazziro (1 foto) é", added == [2])
 # 10) modo "1 por dia": na sala há 2 h (passou da meia-noite), não cumprimenta no "novo dia"
 d = make(); d.cfg.greeting["once_per"] = "dia"
 d.presence.seen(1, t0 - 7200, 0.6)

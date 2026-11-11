@@ -3,15 +3,17 @@ cadastradas. Faz antes uma cópia do banco (visao.db.antes-limpeza-<data>) para 
     sudo /opt/visao/venv/bin/python limpar-aprendidas.py
 Uso: depois que ele aprendeu o rosto errado de alguém (ex.: Victor guardado como Lucas)."""
 import os
-import shutil
 import sqlite3
 import time
 
 DATA = "/opt/visao/data"
 DB = os.path.join(DATA, "visao.db")
 copia = f"{DB}.antes-limpeza-{time.strftime('%Y%m%d-%H%M%S')}"
-shutil.copy2(DB, copia)
 con = sqlite3.connect(DB)
+# cópia pelo próprio SQLite: o banco usa WAL (as mudanças recentes ficam em visao.db-wal) e copiar
+# só o arquivo principal, com o site aberto, deu uma cópia sem tabelas (2026-11-11)
+with sqlite3.connect(copia) as destino:
+    con.backup(destino)
 linhas = con.execute("SELECT s.id, m.name, s.crop_path FROM samples s JOIN members m ON m.id = s.member_id "
                      "WHERE s.source = 'auto'").fetchall()
 por_membro = {}

@@ -56,9 +56,9 @@ DEFAULTS = {
         "threads": 4,
         "classic_engine": True,    # motor clássico do OpenCV: ~30% mais rápido, mesmos resultados
         "auto_enrich": True,       # aprende novas amostras quando a certeza é alta
-        "min_manual": 3,           # ...mas só depois de o membro ter N fotos cadastradas por gente (foto,
-                                   # câmera ou revisão). Com 1 foto só, um engano (Victor lido como Lucas,
-                                   # 2026-11-11) virava amostra do outro e o erro se reforçava.
+        "min_manual": 1,           # ...depois de o membro ter N fotos cadastradas por gente (foto, câmera,
+                                   # revisão). 1 = aprende desde o cadastro até enrich_until (pedido do Victor,
+                                   # 2026-11-11: o nome só importa no "boa tarde"; 3 = mais cauteloso)
         "auto_enrich_score": 0.45,
         "hard_learn": True,        # aprende o ângulo difícil quando o mesmo rosto é confirmado depois
         "auto_enrich_max": 30,     # ao encher, a mais antiga é trocada pela nova
@@ -76,6 +76,18 @@ DEFAULTS = {
         "record_clips": True,
         "clip_before_s": 10,
         "clip_after_s": 20,
+    },
+    # Gesto para a foto da areia: as duas mãos abertas ao lado do rosto, seguradas (Victor, 2026-11-11:
+    # substitui a voz, que ouvia errado e demorava). Com o gesto ligado, o microfone não é usado.
+    "gesture": {
+        "enabled": True,
+        "model": "/opt/visao/models/palm_detection_mediapipe_2023feb.onnx",
+        "hold_s": 1.5,             # quanto tempo segurar as mãos
+        "pause_s": 20,             # depois de uma foto, espera isso antes de aceitar outro gesto
+        "interval_s": 0.25,        # procura as mãos no máximo 4x por segundo (~50 ms cada, no lab2)
+        "min_face_px": 50,         # só com alguém perto da câmera
+        "phrase": "Foto em três... dois... um... Sorria!",
+        "keep_voice": False,       # true = continua ouvindo comandos de voz junto com o gesto
     },
     "web": {
         "host": "0.0.0.0",
