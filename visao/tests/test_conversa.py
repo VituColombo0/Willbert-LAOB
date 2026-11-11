@@ -2,6 +2,7 @@
     python -m tests.test_conversa
 """
 import json
+import os
 import numpy as np
 import threading
 import time
@@ -452,4 +453,22 @@ _g.gesto = Gesto(segurar_s=1.0); _fotos.clear()
 for i in range(6):
     _g.check_gesture(None, 30 + 0.3 * i)
 check("rosto pequeno (longe da câmera): não procura o gesto", _fotos == [])
+# --- foto da areia: 1080p do gravador e imagem melhorada
+import shutil as _sh, subprocess as _sp2, tempfile as _tf
+from visao.detector import melhora_foto
+_peq = (np.random.default_rng(1).integers(0, 255, (368, 311, 3))).astype(np.uint8)
+_m = melhora_foto(_peq)
+check("foto pequena é ampliada para 720 px de altura", _m.shape[0] == 720 and abs(_m.shape[1] / 720 - 311 / 368) < 0.01, f"{_m.shape}")
+check("foto grande não é ampliada", melhora_foto(np.zeros((900, 700, 3), np.uint8)).shape[:2] == (900, 700))
+if _sh.which("ffmpeg"):
+    _dir = _tf.mkdtemp()
+    _sp2.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=10", "-t", "2",
+              "-c:v", "libx264", "-pix_fmt", "yuv420p", os.path.join(_dir, "seg_20261111-180000.ts")], check=True)
+    _q = _det.Detector.__new__(_det.Detector)
+    _q.rec = type("R", (), {"dir": _dir})()
+    _img = _q.quadro_alta()
+    check("quadro 1080p tirado do pedaço gravado", _img is not None and _img.shape[:2] == (1080, 1920))
+    _q.rec = None
+    check("sem gravador: sem quadro 1080p (usa o vídeo de análise)", _q.quadro_alta() is None)
+    _sh.rmtree(_dir)
 print("TUDO OK" if ok else "HÁ FALHAS")

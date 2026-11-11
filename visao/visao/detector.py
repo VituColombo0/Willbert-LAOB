@@ -10,7 +10,9 @@ Fluxo de cada ciclo:
 """
 import json
 import logging
+import glob
 import os
+import subprocess
 import queue
 import re
 import shutil
@@ -244,6 +246,46 @@ class Detector:
         threading.Thread(target=manda, daemon=True, name="areia").start()
         return True
 
+    def quadro_alta(self, bytes_fim=1_500_000):
+        """Último quadro do vídeo principal (1080p) que o gravador guarda em pedaços na RAM.
+        Não abre outra conexão com a câmera (a Tapo aceita poucas). Lê só o final dos pedaços
+        mais recentes (o .ts se ressincroniza sozinho) e decodifica até o último quadro; o
+        "-sseof" do ffmpeg 4.4 não funciona em .ts. None se não der."""
+        if self.rec is None:
+            return None
+        segs = sorted(glob.glob(os.path.join(self.rec.dir, "seg_*.ts")), key=os.path.getmtime)[-2:]
+        dados = b""
+        for seg in reversed(segs):  # o mais novo pode ter acabado de começar: completa com o anterior
+            try:
+                with open(seg, "rb") as f:
+                    f.seek(0, os.SEEK_END)
+                    n = min(f.tell(), bytes_fim - len(dados))
+                    f.seek(-n, os.SEEK_END)
+                    dados = f.read(n) + dados
+            except OSError:
+                continue
+            if len(dados) >= bytes_fim:
+                break
+        if len(dados) < 10_000:
+            return None
+        saida = os.path.join(self.rec.dir, f"quadro_{os.getpid()}.jpg")
+        try:
+            r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-y", "-f", "mpegts", "-i", "pipe:0",
+                                "-an", "-q:v", "2", "-update", "1", "-f", "image2", saida],
+                               input=dados, capture_output=True, timeout=15)
+            img = cv2.imread(saida) if os.path.exists(saida) else None
+            if img is None:
+                log.warning("quadro em 1080p: ffmpeg não gerou imagem (código %s)", r.returncode)
+            return img
+        except Exception as e:
+            log.warning("quadro em 1080p: %s", e)
+            return None
+        finally:
+            try:
+                os.remove(saida)
+            except OSError:
+                pass
+
     def _foto_para_areia(self, nome, url):
         import urllib.request
         t0 = time.time()
@@ -257,13 +299,19 @@ class Detector:
             return
         agora = time.time()
         vistos = [t for t in list(self.tracker.tracks.values()) if agora - t.last_ts < 4.0]
-        recorte = frame
-        if vistos:  # um recorte folgado em volta do rosto mais perto; o Projetor-LAOB acerta o enquadramento
-            x, y, w, h = max(vistos, key=lambda t: t.face.w).face.box
+        # a análise usa o vídeo menor (720p); a foto sai do 1080p que o gravador já guarda na RAM
+        alta = self.quadro_alta()
+        base, escala = (alta, alta.shape[1] / frame.shape[1]) if alta is not None else (frame, 1.0)
+        recorte = base
+        if vistos:  # cabeça e ombros de quem está mais perto; o Projetor-LAOB acerta o enquadramento
+            x, y, w, h = (v * escala for v in max(vistos, key=lambda t: t.face.w).face.box)
             cx, cy, lado = x + w / 2, y + h / 2, max(w, h)
-            x0, x1 = int(max(0, cx - 1.6 * lado)), int(min(frame.shape[1], cx + 1.6 * lado))
-            y0, y1 = int(max(0, cy - 1.5 * lado)), int(min(frame.shape[0], cy + 2.3 * lado))
-            recorte = frame[y0:y1, x0:x1]
+            x0, x1 = int(max(0, cx - 1.8 * lado)), int(min(base.shape[1], cx + 1.8 * lado))
+            y0, y1 = int(max(0, cy - 1.6 * lado)), int(min(base.shape[0], cy + 2.6 * lado))
+            recorte = base[y0:y1, x0:x1]
+        recorte = melhora_foto(recorte)
+        log.info("foto para a areia: %dx%d (fonte %s)", recorte.shape[1], recorte.shape[0],
+                 "1080p" if alta is not None else "vídeo de análise")
         ok, jpg = cv2.imencode(".jpg", recorte, [cv2.IMWRITE_JPEG_QUALITY, 95])
         if not ok:
             return
@@ -1131,6 +1179,20 @@ class Detector:
         self.onvif.stop()
         if self.ouvido:
             self.ouvido.stop()
+
+
+def melhora_foto(img, altura_min=720):
+    """Foto para o projetor: amplia com suavidade se for pequena, tira o ruído da câmera e
+    devolve um pouco de nitidez (a imagem da Tapo é granulada, sobretudo com pouca luz)."""
+    if img is None or img.size == 0:
+        return img
+    h = img.shape[0]
+    if h < altura_min:
+        f = min(3.0, altura_min / h)
+        img = cv2.resize(img, (int(img.shape[1] * f), int(h * f)), interpolation=cv2.INTER_LANCZOS4)
+    img = cv2.fastNlMeansDenoisingColored(img, None, 4, 4, 7, 21)
+    borrada = cv2.GaussianBlur(img, (0, 0), 1.2)
+    return cv2.addWeighted(img, 1.4, borrada, -0.4, 0)
 
 
 def painel_areia(url, dados=None, timeout=5):
