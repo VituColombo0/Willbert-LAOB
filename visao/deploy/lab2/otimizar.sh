@@ -80,6 +80,8 @@ Unattended-Upgrade::Package-Blacklist { "nvidia-"; "libnvidia-"; "xserver-xorg-v
 CONF
 [ -e "$EST/snap.antes" ] || snap get system refresh.timer > "$EST/snap.antes" 2>/dev/null || true
 snap set system refresh.timer=03:00-05:00 2>/dev/null || true
+# o kernel continua atualizando sozinho; o PC só inicia num kernel que tenha o driver NVIDIA
+bash "$DIR/kernel-com-driver.sh" | sed 's/^/  /'
 
 echo "[7/8] sem avisos por cima do projetor: atualização, relatório da Ubuntu, alarmes, backup"
 # (as atualizações de segurança continuam automáticas; só a janela "há atualizações" some)
