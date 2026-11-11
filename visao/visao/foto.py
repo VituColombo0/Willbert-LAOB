@@ -45,7 +45,7 @@ def mais_nitido(quadros, caixa=None):
 
 
 # ------------------------------------------------------------------ enquadramento
-def enquadra(img, rosto, olhos=None, saida=(600, 800)):
+def enquadra(img, rosto, olhos=None, saida=(600, 800), zoom_max=1.6):
     """Retrato 3:4 de cabeça e ombros, com os olhos nivelados. rosto = (x, y, l, a);
     olhos = ((xe, ye), (xd, yd)) do YuNet. Devolve (imagem, matriz 2x3 usada)."""
     W, H = saida
@@ -58,7 +58,9 @@ def enquadra(img, rosto, olhos=None, saida=(600, 800)):
         if abs(ang) > 25:                  # leitura estranha dos olhos: não gira
             ang = 0.0
     altura = fh * 3.0                      # cabeça + pescoço + ombros
-    esc = H / altura
+    # rosto pequeno (pessoa longe): não amplia além de zoom_max; mostra mais do corpo em vez de
+    # borrar (em 2026-11-11 uma foto foi ampliada 3,5x e ficou irreconhecível)
+    esc = min(H / altura, zoom_max)
     M = cv2.getRotationMatrix2D((cx, cy), ang, esc)
     M[0, 2] += W / 2 - cx
     M[1, 2] += H / 2 - cy

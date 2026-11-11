@@ -93,4 +93,20 @@ if shutil.which("ffmpeg"):
     check("tamanho do vídeo gravado", q.tamanho_alta() == (1920, 1080))
     shutil.rmtree(d)
 
+# --- rosto pequeno não é ampliado demais
+_, Mp = F.enquadra(cena, (140, 120, 20, 25))
+check("rosto pequeno (longe): zoom no máximo 1,6x", abs(Mp[0, 0]) <= 1.61, f"{Mp[0, 0]:.2f}")
+
+# --- rajada sem rosto de frente: não monta foto (o Willbert pede o gesto de novo)
+import visao.detector as det2
+from visao.config import load as _load
+q2 = det2.Detector.__new__(det2.Detector)
+q2.cfg = _load("/nonexistent.toml", detect_hardware=False)
+q2.fundo = F.FundoCena()
+q2.tamanho_alta = lambda: (1920, 1080)
+q2.quadros_rajada = lambda regiao: [cena.copy(), cena.copy()]
+q2.rosto_perto = lambda img, esperado, olhos=False: None
+quem = type("T", (), {"face": type("Fa", (), {"box": (600, 300, 100, 120)})()})()
+r = q2.monta_retrato(np.zeros((720, 1280, 3), np.uint8), quem)
+check("ninguém de frente na rajada: sem foto", r[0] is None, f"{r[2]}")
 print("TUDO OK" if ok else "HÁ FALHAS")

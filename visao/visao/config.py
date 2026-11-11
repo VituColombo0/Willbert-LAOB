@@ -85,7 +85,8 @@ DEFAULTS = {
         "hold_s": 1.5,             # quanto tempo segurar as mãos
         "pause_s": 20,             # depois de uma foto, espera isso antes de aceitar outro gesto
         "interval_s": 0.25,        # procura as mãos no máximo 4x por segundo (~50 ms cada, no lab2)
-        "min_face_px": 50,         # só com alguém perto da câmera
+        "min_face_px": 60,         # rosto mínimo para a foto (px no 720p); menor: pede para chegar perto
+        "look_face_px": 40,        # a partir daqui já procura o gesto (para poder avisar quem está longe)
         "phrase": "Pode abaixar as mãos. Foto em três... dois... um... Sorria!",
         "keep_voice": False,       # true = continua ouvindo comandos de voz junto com o gesto
     },

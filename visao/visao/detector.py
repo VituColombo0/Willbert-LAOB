@@ -125,7 +125,8 @@ class Detector:
                 from .gesto import Gesto, Palmas
                 self.palmas = Palmas(gc["model"])
                 self.gesto = Gesto(float(gc.get("hold_s", 1.5)), float(gc.get("pause_s", 20)))
-                self.speaker.generate_later([gc.get("phrase") or "Sorria!"])
+                self.speaker.generate_later([gc.get("phrase") or "Sorria!",
+                                             "Chegue um pouco mais perto da câmera e faça o gesto de novo."])
                 log.info("gesto ligado: mãos abertas ao lado do rosto por %.1f s tiram a foto da areia",
                          float(gc.get("hold_s", 1.5)))
             except Exception:
@@ -405,6 +406,7 @@ class Detector:
     def monta_retrato(self, frame, quem):
         """A foto tratada para a areia: (imagem, alfa ou None, descrição da fonte). Ver foto.py."""
         F = foto_mod
+        achado_rajada = None
         caixa = quem.face.box if quem is not None else None
         img, fundo, esperado, fonte = frame, None, caixa, "vídeo de análise"
         tam = self.tamanho_alta()
@@ -419,13 +421,24 @@ class Detector:
             quadros = self.quadros_rajada((x0, y0, x1 - x0, y1 - y0)) if x1 - x0 > 32 and y1 - y0 > 32 else []
             if quadros:
                 esperado = (x - x0, y - y0, w, h)
-                img = F.mais_nitido(quadros, esperado)
+                # do mais nítido para o menos: o primeiro em que o rosto aparece de verdade
+                por_nota = sorted(quadros, key=lambda q: -F.nitidez(q))[:6]
+                achados = [(q, self.rosto_perto(q, esperado, olhos=True)) for q in por_nota]
+                achados = [(q, a) for q, a in achados if a is not None]
+                if not achados:
+                    log.info("foto para a areia: nenhum rosto de frente nos %d quadros", len(quadros))
+                    return None, None, "sem rosto de frente"
+                img, achado_rajada = achados[0]
                 fonte = f"1080p (o mais nítido de {len(quadros)} quadros)"
-                if vazio is not None and vazio.shape[1] == tam[0]:
+                if vazio is None:
+                    log.info("foto para a areia: ainda sem foto do fundo vazio")
+                elif vazio.shape[1] != tam[0]:
+                    log.info("foto para a areia: fundo vazio %s não bate com o vídeo %s", vazio.shape, tam)
+                else:
                     fundo = vazio[y0:y1, x0:x1]
         if fundo is None and vazio is not None and img is frame:
             fundo = cv2.resize(vazio, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_AREA)
-        achado = self.rosto_perto(img, esperado, olhos=True)
+        achado = achado_rajada if img is not frame else self.rosto_perto(img, esperado, olhos=True)
         if achado is None and esperado is None:
             return melhora_foto(img), None, fonte + ", sem rosto"
         caixa_l, olhos = achado if achado is not None else (esperado, None)
@@ -463,11 +476,20 @@ class Detector:
         if quem is None and vistos:
             quem = max(vistos, key=lambda t: t.face.w)
         t1 = time.time()
-        try:
-            img, alfa, fonte = self.monta_retrato(frame, quem)
-        except Exception:
-            log.exception("foto para a areia: tratamento falhou; mando a foto simples")
-            img, alfa, fonte = melhora_foto(frame), None, "vídeo de análise (sem tratamento)"
+        img = None
+        for tentativa in range(2):
+            try:
+                img, alfa, fonte = self.monta_retrato(frame, quem)
+            except Exception:
+                log.exception("foto para a areia: tratamento falhou; mando a foto simples")
+                img, alfa, fonte = melhora_foto(frame), None, "vídeo de análise (sem tratamento)"
+            if img is not None:
+                break
+            time.sleep(0.6)   # a pessoa pode estar virando: tenta mais uma vez
+            frame = self.src.latest()[0] if self.src.latest()[0] is not None else frame
+        if img is None:
+            self.speaker.speak_now("Não vi seu rosto direito. Faça o gesto de novo, olhando para a câmera.")
+            return
         log.info("foto para a areia: %dx%d, %s, %s (%.1f s)", img.shape[1], img.shape[0], fonte,
                  "fundo recortado" if alfa is not None else "com fundo", time.time() - t1)
         if alfa is not None:
@@ -580,7 +602,7 @@ class Detector:
             return
         gc = self.cfg.gesture
         perto = [t for t in self.tracker.tracks.values()
-                 if now - t.last_ts < 3 and t.face.w >= float(gc.get("min_face_px", 50))]
+                 if now - t.last_ts < 3 and t.face.w >= float(gc.get("look_face_px", 40))]
         if not perto:
             self.gesto.leitura(False, now)
             return
@@ -591,6 +613,11 @@ class Detector:
         palmas = self.palmas.detecta(frame)
         quem = next((t for t in perto if maos_ao_lado(t.face.box, palmas)), None)
         if self.gesto.leitura(quem is not None, now):
+            if quem.face.w < float(gc.get("min_face_px", 60)):
+                log.info("gesto de longe (rosto de %.0f px): pedindo para chegar perto", quem.face.w)
+                self.speaker.speak_fixed("Chegue um pouco mais perto da câmera e faça o gesto de novo.")
+                self.gesto.disparou = now - float(gc.get("pause_s", 20)) + 4   # pode tentar de novo logo
+                return
             nome = self.gallery.names.get(quem.member_id) if quem.member_id is not None else None
             log.info("gesto de foto (%s): mandando para a areia", nome or "pessoa não identificada")
             self.speaker.speak_fixed(gc.get("phrase") or "Sorria!")

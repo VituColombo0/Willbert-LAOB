@@ -452,7 +452,14 @@ _g.tracker.tracks[1].face = Face(np.array([950, 450, 30, 36] + [0] * 10 + [0.9],
 _g.gesto = Gesto(segurar_s=1.0); _fotos.clear()
 for i in range(6):
     _g.check_gesture(None, 30 + 0.3 * i)
-check("rosto pequeno (longe da câmera): não procura o gesto", _fotos == [])
+check("rosto bem pequeno (muito longe): não procura o gesto", _fotos == [])
+_g.tracker.tracks[1].face = Face(np.array([950, 450, 50, 60] + [0] * 10 + [0.9], np.float32))
+_g.gesto = Gesto(segurar_s=1.0); _fotos.clear(); _falas.clear()
+_g.palmas = type("P", (), {"detecta": lambda self, f: [pal(900, 480), pal(1050, 480)]})()
+for i in range(6):
+    _g.tracker.tracks[1].last_ts = 50 + 0.3 * i
+    _g.check_gesture(None, 50 + 0.3 * i)
+check("gesto de longe: pede para chegar perto e não tira foto", _fotos == [] and _falas and "perto" in _falas[0], f"{_falas}")
 # --- foto da areia: 1080p do gravador e imagem melhorada
 import shutil as _sh, subprocess as _sp2, tempfile as _tf
 from visao.detector import melhora_foto
