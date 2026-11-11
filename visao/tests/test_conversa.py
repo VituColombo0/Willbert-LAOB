@@ -326,4 +326,32 @@ check("painel: recusa vira ok False com o motivo", painel_areia(base + "/tema", 
       {"ok": False, "msg": "tema inválido"})
 srv.shutdown()
 check("painel desligado: None", painel_areia("http://127.0.0.1:9/estado", timeout=1) is None)
+# --- ffmpeg do Ubuntu 22.04 (4.4) x novos: opções certas para cada versão
+from visao.camera import ffmpeg_versao_do_texto, opcoes_quadros_sem_repetir, opcoes_rtsp_timeout
+check("versão do ffmpeg 4.4 do Ubuntu", ffmpeg_versao_do_texto("ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright") == (4, 4))
+check("versão do ffmpeg 6.1 e compilação do git", ffmpeg_versao_do_texto("ffmpeg version n6.1.1") == (6, 1)
+      and ffmpeg_versao_do_texto("ffmpeg version N-112233-gabc") == (99, 0))
+check("ffmpeg 4.4: -stimeout e -vsync 0", opcoes_rtsp_timeout(5, (4, 4)) == ["-stimeout", "5"]
+      and opcoes_quadros_sem_repetir((4, 4)) == ["-vsync", "0"])
+check("ffmpeg 6: -timeout e -fps_mode", opcoes_rtsp_timeout(5, (6, 1)) == ["-timeout", "5"]
+      and opcoes_quadros_sem_repetir((6, 1)) == ["-fps_mode", "passthrough"])
+import subprocess as _sp
+from visao.camera import ErrosFfmpeg
+_p = _sp.Popen(["sh", "-c", "echo 'rtsp://usuario:segredo@192.168.0.166:554/stream1: 401 Unauthorized' >&2"],
+               stderr=_sp.PIPE, stdout=_sp.DEVNULL)
+_e = ErrosFfmpeg(_p); _p.wait(); time.sleep(0.2)
+check("erro do ffmpeg vai para o log sem a senha", "401" in _e.texto() and "segredo" not in _e.texto()
+      and "usuario" not in _e.texto(), _e.texto())
+import io as _io
+from visao.ouvido import le_exato
+class CanoQuebrado(_io.RawIOBase):
+    """Entrega no máximo 7 bytes por leitura, como um cano real em pedaços."""
+    def __init__(self, dados): self.d = dados
+    def readable(self): return True
+    def read(self, n=-1):
+        b, self.d = self.d[:min(n, 7)], self.d[min(n, 7):]
+        return b
+c = CanoQuebrado(bytes(range(50)))
+check("áudio em pedaços quebrados é juntado", le_exato(c, 20) == bytes(range(20)) and le_exato(c, 30) == bytes(range(20, 50)))
+check("fim de verdade do áudio é percebido", le_exato(c, 10) is None)
 print("TUDO OK" if ok else "HÁ FALHAS")

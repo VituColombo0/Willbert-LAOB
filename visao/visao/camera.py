@@ -1,7 +1,9 @@
 """Acesso à câmera: quadros via RTSP/ffmpeg, gravação em anel e eventos ONVIF."""
+import functools
 import glob
 import logging
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -11,6 +13,57 @@ from datetime import datetime, timedelta
 import numpy as np
 
 log = logging.getLogger("visao.camera")
+
+
+@functools.lru_cache(maxsize=1)
+def ffmpeg_versao():
+    """(maior, menor) do ffmpeg instalado; (99, 0) se não der para saber (compilações do git)."""
+    try:
+        out = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return (99, 0)
+    return ffmpeg_versao_do_texto(out)
+
+
+def ffmpeg_versao_do_texto(texto):
+    m = re.search(r"ffmpeg version n?(\d+)\.(\d+)", texto or "")
+    return (int(m.group(1)), int(m.group(2))) if m else (99, 0)
+
+
+def opcoes_rtsp_timeout(microssegundos=10000000, versao=None):
+    """Tempo-limite da conexão RTSP. No ffmpeg 4.x "-timeout" põe o ffmpeg ESPERANDO conexão
+    (modo servidor: sai na hora com código 1) e o certo é "-stimeout"; do 5 em diante é "-timeout"."""
+    v = versao or ffmpeg_versao()
+    return ["-stimeout" if v < (5, 0) else "-timeout", str(microssegundos)]
+
+
+def opcoes_quadros_sem_repetir(versao=None):
+    """Não duplicar nem inventar quadros: "-fps_mode passthrough" só existe do 5.1 em diante
+    (o Ubuntu 22.04 do lab2 tem o 4.4, onde é "-vsync 0")."""
+    v = versao or ffmpeg_versao()
+    return ["-fps_mode", "passthrough"] if v >= (5, 1) else ["-vsync", "0"]
+
+
+class ErrosFfmpeg:
+    """Guarda as últimas linhas de erro de um ffmpeg (lidas numa thread, sem travar o processo),
+    com usuário e senha dos endereços mascarados, para o log dizer POR QUE ele parou."""
+
+    def __init__(self, proc, linhas=4):
+        from collections import deque
+        self.linhas = deque(maxlen=linhas)
+        threading.Thread(target=self._le, args=(proc,), daemon=True, name="ffmpeg-erros").start()
+
+    def _le(self, proc):
+        try:
+            for linha in iter(proc.stderr.readline, b""):
+                t = re.sub(r"(\w+://)[^/@\s]*@", r"\1***@", linha.decode(errors="replace").strip())
+                if t:
+                    self.linhas.append(t[:200])
+        except (ValueError, OSError):
+            pass
+
+    def texto(self):
+        return " | ".join(self.linhas) or "sem mensagem"
 
 
 def _probe_size(url, timeout=25):
@@ -67,13 +120,14 @@ class FrameSource:
             # decodificação ficava para trás e o detector analisava imagens de até 7 s atrás.
             cmd = ["nice", "-n", "-10",
                    "ffmpeg", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp",
-                   "-timeout", "10000000", "-threads", "1",
+                   *opcoes_rtsp_timeout(), "-threads", "1",
                    # sem buffer de entrada: o quadro analisado é o mais recente possível
                    "-fflags", "nobuffer", "-flags", "low_delay", "-i", self.url, "-an",
-                   "-vf", f"select=not(mod(n\\,{self.every}))", "-fps_mode", "passthrough",
+                   "-vf", f"select=not(mod(n\\,{self.every}))", *opcoes_quadros_sem_repetir(),
                    "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"]
-            self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                          stdin=subprocess.DEVNULL, bufsize=0)
+            erros = ErrosFfmpeg(self.proc)
             log.info("lendo stream %dx%d (1 a cada %d quadros)", w, h, self.every)
             started = time.time()
             threading.Thread(target=self._watchdog, args=(self.proc, started), daemon=True).start()
@@ -94,7 +148,7 @@ class FrameSource:
                 self._kill()
                 self.online, self.fps = False, 0.0
             if not self._halt.is_set():
-                log.warning("stream encerrado; reconectando")
+                log.warning("stream encerrado (ffmpeg: %s); reconectando", erros.texto())
                 self._halt.wait(2)
 
     def _read_into(self, mv):
@@ -138,18 +192,19 @@ class Recorder:
     def run(self):
         while not self._halt.is_set():
             cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp",
-                   "-timeout", "10000000", "-i", self.url, "-map", "0:v:0", "-c", "copy",
+                   *opcoes_rtsp_timeout(), "-i", self.url, "-map", "0:v:0", "-c", "copy",
                    "-f", "segment", "-segment_time", str(self.SEG), "-reset_timestamps", "1",
                    "-strftime", "1", os.path.join(self.dir, "seg_%Y%m%d-%H%M%S.ts")]
             self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                         stderr=subprocess.DEVNULL)
+                                         stderr=subprocess.PIPE)
+            erros = ErrosFfmpeg(self.proc)
             self.online = True
             while self.proc.poll() is None and not self._halt.is_set():
                 self._cleanup()
                 self._halt.wait(5)
             self.online = False
             if not self._halt.is_set():
-                log.warning("gravador parou (código %s); reiniciando", self.proc.returncode)
+                log.warning("gravador parou (código %s; ffmpeg: %s); reiniciando", self.proc.returncode, erros.texto())
                 self._halt.wait(5)
 
     def _cleanup(self):

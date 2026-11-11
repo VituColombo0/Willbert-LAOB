@@ -13,7 +13,23 @@ import time
 
 import numpy as np
 
+from .camera import ErrosFfmpeg
+
 log = logging.getLogger("visao.ouvido")
+
+
+def le_exato(arquivo, n):
+    """Lê exatamente n bytes de um cano. Um cano sem buffer pode entregar menos que o pedido
+    sem ter acabado (no lab2 o áudio chega em pedaços quebrados): junta até completar.
+    None só quando o ffmpeg fechou de verdade."""
+    partes, falta = [], n
+    while falta > 0:
+        b = arquivo.read(falta)
+        if not b:
+            return None
+        partes.append(b)
+        falta -= len(b)
+    return partes[0] if len(partes) == 1 else b"".join(partes)
 
 SR = 16000
 FRAME_MS = 30
@@ -99,14 +115,22 @@ class Ouvido:
             cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp",
                    "-fflags", "nobuffer", "-i", self.acfg.audio_url, "-vn", "-ac", "1", "-ar", str(SR),
                    "-f", "s16le", "pipe:1"]
+            erros = None
             try:
-                self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                              stdin=subprocess.DEVNULL, bufsize=0)
+                erros = ErrosFfmpeg(self.proc)
                 self.state = "ouvindo"
                 self._loop(vad, self.proc)
                 backoff = 2
             except Exception as e:
                 self.last_error = f"{type(e).__name__}: {e}"
+                if erros is not None:
+                    try:
+                        self.proc.wait(timeout=1)
+                    except Exception:
+                        pass
+                    self.last_error += f" (ffmpeg: {erros.texto()})"
                 log.warning("microfone da câmera: %s", self.last_error)
             finally:
                 if self.proc and self.proc.poll() is None:
@@ -127,8 +151,8 @@ class Ouvido:
         end_ms, max_ms = int(self.acfg.end_silence_ms), int(float(self.acfg.max_utterance_s) * 1000)
         recent = collections.deque(maxlen=need_start + 2)
         while not self._stop.is_set():
-            frame = proc.stdout.read(FRAME_BYTES)
-            if not frame or len(frame) < FRAME_BYTES:
+            frame = le_exato(proc.stdout, FRAME_BYTES)
+            if frame is None:
                 raise RuntimeError("áudio da câmera encerrado")
             if self._muted():
                 pre.clear()
