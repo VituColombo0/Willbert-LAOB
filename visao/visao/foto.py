@@ -141,7 +141,9 @@ class FundoCena:
         if not self.fotos:
             return None
         if self._mediana is None:
-            self._mediana = self.fotos[0] if len(self.fotos) == 1 else \
+            # mediana só com 3+ fotos: com 2 ela é a média, e se a câmera mexeu entre as duas
+            # (ou a de antes de religar era de outro ângulo) mistura dois cenários
+            self._mediana = self.fotos[-1] if len(self.fotos) < 3 else \
                 np.median(np.stack(self.fotos), axis=0).astype(np.uint8)
         return self._mediana
 

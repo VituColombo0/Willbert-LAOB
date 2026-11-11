@@ -35,6 +35,9 @@ passante = parede.copy(); passante[0:100, 0:100] = 0
 for i, img in enumerate((parede, passante, parede)):
     fc.adiciona(img, 100 + i)
 check("mediana tira quem passou de relance", np.array_equal(fc.imagem(), parede))
+fc2 = F.FundoCena(n=5)
+fc2.adiciona(passante, 1); fc2.adiciona(parede, 2)
+check("com 2 fotos usa a mais nova (sem misturar)", np.array_equal(fc2.imagem(), parede))
 check("com 2+ fotos, a próxima só em 5 min", not fc.precisa(200) and fc.precisa(500))
 fc.esquece()
 check("câmera girou: esquece o fundo", fc.imagem() is None)

@@ -12,6 +12,10 @@ registra quem passou pelo laboratório e agora **conversa**: chame "Willbert" pe
 - **Cumprimenta** uma vez por período (bom dia / boa tarde / boa noite), pelo nome, em dupla ou
   o grupo. Com placa de vídeo, o cumprimento vem do LLM com contexto ("faz três dias que não te
   via, Mario!"); se o LLM demorar mais de 1,5 s, sai a frase padrão.
+> **No lab2 (desde 2026-11-11) a conversa está desligada:** sem IA e sem microfone; a foto da areia é
+> pelo gesto das mãos e ele só fala frases prontas (cumprimentos e a contagem da foto). O que segue
+> sobre conversa vale para PCs com `assistant.enabled` e `gesture.keep_voice` (ou sem o gesto).
+
 - **Conversa** pela câmera: microfone da Tapo -> detecção de voz -> Whisper -> resposta -> voz.
   - Perguntas comuns têm resposta **pronta e exata**, local e instantânea (menos de 1 ms, sem LLM):
     hora, data, dia da semana, mês/ano, ontem/amanhã; quem está aqui, quantos, quem chegou (primeiro,

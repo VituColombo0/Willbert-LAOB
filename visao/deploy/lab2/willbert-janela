@@ -8,7 +8,7 @@ case "$acao" in
   ligar)
     avisa system-run "Ligando o Willbert... leva uns 30 segundos."
     saida=$(sudo -n /usr/local/sbin/willbert-controle ligar 2>&1) || erro "Não consegui ligar:\n\n${saida//</&lt;}"
-    avisa face-smile "Willbert ligado! Chame \"Willbert\" perto da câmera." ;;
+    avisa face-smile "Willbert ligado! Para a foto na areia: as duas mãos abertas ao lado do rosto." ;;
   desligar)
     saida=$(sudo -n /usr/local/sbin/willbert-controle desligar 2>&1) || erro "Não consegui desligar:\n\n${saida//</&lt;}"
     avisa system-shutdown "Willbert desligado." ;;
