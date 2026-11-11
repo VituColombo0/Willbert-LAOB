@@ -27,6 +27,7 @@ import cv2
 import numpy as np
 
 from . import db
+from . import foto as foto_mod
 from .camera import FrameSource, OnvifWatcher, Recorder
 from .config import load, rtsp_url
 from .enroll import member_dir, process_pending
@@ -115,6 +116,9 @@ class Detector:
         self.assistente = self.ouvido = None
         self.gesto = self.palmas = None
         self.last_palm = 0.0
+        # fundo vazio da cena (câmera fixa): o que já estava lá não entra na foto da areia
+        self.fundo = foto_mod.FundoCena(arquivo=os.path.join(self.data, "fundo-vazio.jpg"))
+        self._fundo_ocupado = False
         gc = cfg.get("gesture") or {}
         if gc.get("enabled") and os.path.exists(str(gc.get("model") or "")):
             try:
@@ -247,7 +251,7 @@ class Detector:
         threading.Thread(target=manda, daemon=True, name="areia").start()
         return True
 
-    def rosto_perto(self, img, esperado):
+    def rosto_perto(self, img, esperado, olhos=False):
         """Rosto na imagem grande mais perto de onde ele deveria estar (x, y, l, a). Usa um
         detector próprio desta thread (o da análise não pode ser usado ao mesmo tempo)."""
         if getattr(self, "_yunet_foto", None) is None:
@@ -262,12 +266,17 @@ class Detector:
         if fs is None or not len(fs):
             return None
         caixas = [tuple(float(v) / s for v in f[:4]) for f in fs]
+        pares = [((float(f[4]) / s, float(f[5]) / s), (float(f[6]) / s, float(f[7]) / s)) for f in fs]
         if esperado is None:
-            return max(caixas, key=lambda c: c[2])
-        ex, ey, ew, eh = esperado
-        perto = [c for c in caixas
-                 if abs(c[0] + c[2] / 2 - ex - ew / 2) < 1.5 * ew and abs(c[1] + c[3] / 2 - ey - eh / 2) < 1.5 * eh]
-        return min(perto, key=lambda c: abs(c[0] - ex) + abs(c[1] - ey)) if perto else None
+            i = max(range(len(caixas)), key=lambda k: caixas[k][2])
+        else:
+            ex, ey, ew, eh = esperado
+            perto = [k for k, c in enumerate(caixas)
+                     if abs(c[0] + c[2] / 2 - ex - ew / 2) < 1.5 * ew and abs(c[1] + c[3] / 2 - ey - eh / 2) < 1.5 * eh]
+            if not perto:
+                return None
+            i = min(perto, key=lambda k: abs(caixas[k][0] - ex) + abs(caixas[k][1] - ey))
+        return (caixas[i], pares[i]) if olhos else caixas[i]
 
     def quadro_alta(self):
         """Último quadro do vídeo principal (1080p) que o gravador guarda em pedaços de 10 s na
@@ -316,6 +325,126 @@ class Detector:
             except OSError:
                 pass
 
+    def cuida_do_fundo(self, now):
+        """Guarda fotos do laboratório sem ninguém perto da câmera (gente sentada lá atrás vira
+        fundo, tudo bem). Se a câmera girou, as antigas não servem mais."""
+        if self.fundo is None or self.rec is None or self._fundo_ocupado:
+            return
+        if self.onvif.ptz_recent(5):
+            self.fundo.esquece()
+            return
+        perto = any(now - t.last_ts < 30 and t.face.w >= 60 for t in self.tracker.tracks.values())
+        if perto or self.onvif.ptz_recent(60) or not self.fundo.precisa(now):
+            return
+
+        def pega():
+            try:
+                img = self.quadro_alta()
+                if img is not None:
+                    self.fundo.adiciona(img, time.time())
+                    log.info("fundo vazio atualizado (%d fotos)", len(self.fundo.fotos))
+            finally:
+                self._fundo_ocupado = False
+        self._fundo_ocupado = True
+        threading.Thread(target=pega, daemon=True, name="fundo-vazio").start()
+
+    def tamanho_alta(self):
+        """(largura, altura) do vídeo principal gravado, ou None."""
+        if getattr(self, "_tam_alta", None):
+            return self._tam_alta
+        if self.rec is None:
+            return None
+        segs = sorted(glob.glob(os.path.join(self.rec.dir, "seg_*.ts")), key=os.path.getmtime)
+        if not segs:
+            return None
+        try:
+            out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                  "stream=width,height", "-of", "csv=p=0", segs[-1]],
+                                 capture_output=True, text=True, timeout=10).stdout.split()[0].split(",")
+            self._tam_alta = (int(out[0]), int(out[1]))   # o .ts repete a linha (programa e stream)
+        except Exception:
+            return None
+        return self._tam_alta
+
+    def quadros_rajada(self, regiao, ultimos_s=0.6):
+        """Os quadros do último meio segundo do 1080p gravado, só da região (x, y, l, a): a
+        pessoa pode ter piscado ou se mexido em um deles. Lista de imagens (pode vir vazia)."""
+        if self.rec is None:
+            return []
+        segs = sorted(glob.glob(os.path.join(self.rec.dir, "seg_*.ts")), key=os.path.getmtime)[-2:]
+        if not segs:
+            return []
+        seg = segs[-1] if os.path.getsize(segs[-1]) >= 50_000 or len(segs) == 1 else segs[-2]
+        x, y, w, h = (int(v) for v in regiao)
+        try:
+            pk = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                 "packet=pts_time,flags", "-of", "csv=p=0", seg],
+                                capture_output=True, text=True, timeout=10).stdout
+            pacotes = []
+            for linha in pk.split():
+                partes = linha.split(",")
+                try:
+                    pacotes.append((float(partes[0]), partes[1].startswith("K")))
+                except (ValueError, IndexError):
+                    pass
+            if not pacotes:
+                return []
+            inicio, fim = min(t for t, _ in pacotes), max(t for t, _ in pacotes)
+            chave = max((t for t, k in pacotes if k), default=inicio)
+            filtro = f"select=gte(t\\,{max(0.0, fim - chave - ultimos_s):.3f}),crop={w}:{h}:{x}:{y}"
+            r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-ss", f"{chave - inicio:.3f}", "-i", seg,
+                                "-an", "-vf", filtro, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
+                               capture_output=True, timeout=20)
+            n = len(r.stdout) // (w * h * 3)
+            buf = np.frombuffer(r.stdout[:n * w * h * 3], np.uint8)
+            return [buf[i * w * h * 3:(i + 1) * w * h * 3].reshape(h, w, 3).copy() for i in range(n)]
+        except Exception as e:
+            log.warning("rajada em 1080p: %s", e)
+            return []
+
+    def monta_retrato(self, frame, quem):
+        """A foto tratada para a areia: (imagem, alfa ou None, descrição da fonte). Ver foto.py."""
+        F = foto_mod
+        caixa = quem.face.box if quem is not None else None
+        img, fundo, esperado, fonte = frame, None, caixa, "vídeo de análise"
+        tam = self.tamanho_alta()
+        vazio = self.fundo.imagem() if self.fundo is not None else None
+        if caixa is not None and tam is not None:   # região folgada em volta do rosto, no 1080p
+            esc = tam[0] / frame.shape[1]
+            x, y, w, h = (v * esc for v in caixa)
+            lado = max(w, h)
+            cx, cy = x + w / 2, y + h / 2
+            x0, y0 = int(max(0, cx - 2.0 * lado)) & ~1, int(max(0, cy - 1.8 * lado)) & ~1
+            x1, y1 = int(min(tam[0], cx + 2.0 * lado)) & ~1, int(min(tam[1], cy + 3.0 * lado)) & ~1
+            quadros = self.quadros_rajada((x0, y0, x1 - x0, y1 - y0)) if x1 - x0 > 32 and y1 - y0 > 32 else []
+            if quadros:
+                esperado = (x - x0, y - y0, w, h)
+                img = F.mais_nitido(quadros, esperado)
+                fonte = f"1080p (o mais nítido de {len(quadros)} quadros)"
+                if vazio is not None and vazio.shape[1] == tam[0]:
+                    fundo = vazio[y0:y1, x0:x1]
+        if fundo is None and vazio is not None and img is frame:
+            fundo = cv2.resize(vazio, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_AREA)
+        achado = self.rosto_perto(img, esperado, olhos=True)
+        if achado is None and esperado is None:
+            return melhora_foto(img), None, fonte + ", sem rosto"
+        caixa_l, olhos = achado if achado is not None else (esperado, None)
+        retrato, M = F.enquadra(img, caixa_l, olhos)
+        rosto_r = F.caixa_transformada(caixa_l, M)
+        tratada = F.ajusta_luz(retrato, rosto_r)
+        modelo = os.path.join(self.cfg.storage.models_dir, "u2net_human_seg.onnx")
+        if not os.path.exists(modelo):
+            return tratada, None, fonte + ", sem o modelo de recorte"
+        gente = F.mascara_unet(retrato, modelo)
+        diff = None
+        if fundo is not None:
+            fundo_r = cv2.warpAffine(fundo, M, (retrato.shape[1], retrato.shape[0]),
+                                     flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+            diff = F.diferenca_do_fundo(retrato, fundo_r)
+            fonte += ", com o fundo vazio"
+        m = F.junta_mascaras(gente, diff, F.miolo_do_corpo(retrato.shape, rosto_r))
+        return tratada, F.alfa_final(tratada, m), fonte
+
     def _foto_para_areia(self, nome, url, track_id=None):
         import urllib.request
         t0 = time.time()
@@ -333,32 +462,23 @@ class Detector:
         quem = self.tracker.tracks.get(track_id) if track_id is not None else None
         if quem is None and vistos:
             quem = max(vistos, key=lambda t: t.face.w)
-        # a análise usa o vídeo menor (720p); a foto sai do 1080p que o gravador já guarda na RAM,
-        # com o rosto achado de novo nele (a pessoa pode ter se mexido durante a contagem)
-        base, caixa = frame, (quem.face.box if quem is not None else None)
-        alta = self.quadro_alta()
-        if alta is not None:
-            escala = alta.shape[1] / frame.shape[1]
-            esperado = tuple(v * escala for v in caixa) if caixa else None
-            achado = self.rosto_perto(alta, esperado)
-            if achado is not None:
-                base, caixa = alta, achado
-            else:
-                log.info("foto para a areia: rosto não achado no 1080p; usando o vídeo de análise")
-        recorte = base
-        if caixa:  # cabeça e ombros; o Projetor-LAOB acerta o enquadramento
-            x, y, w, h = caixa
-            cx, cy, lado = x + w / 2, y + h / 2, max(w, h)
-            x0, x1 = int(max(0, cx - 1.8 * lado)), int(min(base.shape[1], cx + 1.8 * lado))
-            y0, y1 = int(max(0, cy - 1.6 * lado)), int(min(base.shape[0], cy + 2.6 * lado))
-            recorte = base[y0:y1, x0:x1]
-        recorte = melhora_foto(recorte)
-        log.info("foto para a areia: %dx%d (fonte %s)", recorte.shape[1], recorte.shape[0],
-                 "1080p" if base is alta else "vídeo de análise")
-        ok, jpg = cv2.imencode(".jpg", recorte, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        t1 = time.time()
+        try:
+            img, alfa, fonte = self.monta_retrato(frame, quem)
+        except Exception:
+            log.exception("foto para a areia: tratamento falhou; mando a foto simples")
+            img, alfa, fonte = melhora_foto(frame), None, "vídeo de análise (sem tratamento)"
+        log.info("foto para a areia: %dx%d, %s, %s (%.1f s)", img.shape[1], img.shape[0], fonte,
+                 "fundo recortado" if alfa is not None else "com fundo", time.time() - t1)
+        if alfa is not None:
+            ok, jpg = cv2.imencode(".png", foto_mod.png_com_alfa(img, alfa))
+            ext = ".png"
+        else:
+            ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            ext = ".jpg"
         if not ok:
             return
-        nome_arq = re.sub(r"[^A-Za-z0-9_-]+", "-", f"willbert-{nome or 'rosto'}") + ".jpg"
+        nome_arq = re.sub(r"[^A-Za-z0-9_-]+", "-", f"willbert-{nome or 'rosto'}") + ext
         corpo, borda = multipart_foto(jpg.tobytes(), nome_arq)
         req = urllib.request.Request(url, data=corpo, method="POST",
                                      headers={"Content-Type": f"multipart/form-data; boundary={borda}"})
@@ -505,6 +625,8 @@ class Detector:
                          len(self.gallery), len(set(self.gallery.labels.tolist())))
         if self.every("pending", 3):
             process_pending(self.con, self.engine, self.data)
+        if self.every("fundo", 20):
+            self.cuida_do_fundo(now)
         if self.every("capture", 2):
             self.poll_capture(now)
         if self.every("presence", 15):
