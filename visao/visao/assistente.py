@@ -112,7 +112,7 @@ class Assistente:
     # --------------------------------------------------------------- respostas
     # Ordem importa: as mais específicas primeiro. Tudo aqui é local e instantâneo (regex sobre o
     # texto já sem acento); só o que não casar com nenhuma regra vai para o LLM.
-    REGRAS = ("_encerrar", "_areia_rosto", "_repete", "_saudacao", "_tudo_bem", "_quem_e_voce", "_conta",
+    REGRAS = ("_encerrar", "_areia_comando", "_areia_rosto", "_repete", "_saudacao", "_tudo_bem", "_quem_e_voce", "_conta",
               "_dia_semana", "_mes_ano", "_hora", "_data", "_quem_sou", "_primeiro_ultimo", "_ontem",
               "_quem_saiu", "_quem_esta", "_quantos", "_quem_chegou", "_visitantes", "_sobre_membro",
               "_piada", "_ajuda", "_obrigado")
@@ -201,6 +201,111 @@ class Assistente:
         else:
             r = a + b if op == "mais" else a - b if op == "menos" else a * b
         return f"Dá {str(r).replace('.', ',')}."
+
+    # --- caixa de areia por voz (Projetor-LAOB): fala com o painel http://127.0.0.1:8090
+    TEMAS_AREIA = {"vulcao": "vulcao", "lava": "vulcao", "inverno": "inverno", "neve": "inverno", "gelo": "inverno",
+                   "marte": "marte", "deserto": "deserto", "oceano": "oceano", "mar": "oceano", "praia": "oceano",
+                   "arco iris": "arco-iris", "arcoiris": "arco-iris", "colorido": "arco-iris", "mapa": "mapa",
+                   "classico": "classico", "normal": "classico", "padrao": "classico"}
+    NOMES_TEMAS = {"vulcao": "vulcão", "inverno": "inverno", "marte": "Marte", "deserto": "deserto",
+                   "oceano": "oceano", "arco-iris": "arco-íris", "mapa": "mapa", "classico": "clássico"}
+    FOSSEIS_AREIA = {"triceratops": "triceratops", "pterodactilo": "pterodactilo", "ptero": "pterodactilo",
+                     "pegada": "pegada", "t rex": "trex", "trex": "trex", "tiranossauro": "trex"}
+    AREIA_FIXAS = {
+        "tesouro": "Pronto! Escondi um tesouro na areia. Cavem para achar o baú!",
+        "peixes": "Pronto! Soltei os peixes. Cavem um buraco para fazer um lago.",
+        "carros": "Pronto! Os carrinhos estão andando pelos vales.",
+        "todos": "Pronto! Peixes no lago e carrinhos nos vales.",
+        "labirinto": "Labirinto de água ligado! Levem a água da nascente até a bandeira.",
+        "labirintoNovo": "Rodada nova! Olhem onde está a nascente e a bandeira.",
+        "parar": "Pronto, parei as brincadeiras.",
+        "topografia": "Voltando para a topografia.",
+    }
+    _VERBO_LIGA = r"\b(liga|ligar|ligue|comeca|comecar|comece|inicia|iniciar|vamos|bora|quero|solta|soltar|solte|" \
+                  r"coloca|colocar|coloque|poe|por|ponha|bota|botar|mostra|mostrar|mostre|esconde|esconder|" \
+                  r"enterra|enterrar|faz|faca|fazer|muda|mudar|mude|troca|trocar|troque|deixa|deixe|vira|" \
+                  r"transforma|transformar|abre|abrir|outra|outro|nova|novo)\b"
+
+    def _areia_comando(self, p, f):
+        """Brincadeiras e cores da caixa de areia por voz. Só casa com pedidos claros sobre a areia."""
+        acao = self.acoes.get("areia")
+        assunto = re.search(r"\b(tesouros?|bau|peixes?|peixinhos?|carros?|carrinhos?|animais|bichos|labirinto|"
+                            r"fosseis|fossil|dinossauros?|escavacao|t rex|trex|triceratops|pterodactilo|ptero|tiranossauro|pegada|"
+                            r"topografia|brincadeiras?|tema|cores?|"
+                            r"vulcao|inverno|neve|marte|deserto|oceano|arco ?iris|areia)\b", p)
+        if not assunto:
+            return None
+        # perguntas de placar
+        if re.search(r"\b(quantos|quantas|placar|achamos|acharam|achou|chegou|chegamos)\b", p) and \
+                re.search(r"\b(tesouros?|bau|fosseis|fossil|labirinto|agua|rodadas?)\b", p):
+            if acao is None:
+                return "A caixa de areia não está ligada a mim agora."
+            e = acao("/estado")
+            if not e:
+                return "Não consegui falar com a caixa de areia agora."
+            if re.search(r"\b(labirinto|agua|rodadas?)\b", p):
+                n = int(e.get("labirinto_rodadas") or 0)
+                sit = e.get("labirinto")
+                if sit == "nenhum":
+                    return "O labirinto de água não está ligado." + (
+                        " Vocês venceram uma rodada." if n == 1 else f" Vocês venceram {n} rodadas." if n else "")
+                return ("A água chegou ao alvo! " if sit == "chegou" else "A água ainda não chegou ao alvo. ") + \
+                    (("Vocês já venceram uma rodada." if n == 1 else f"Vocês já venceram {n} rodadas.") if n
+                     else "Nenhuma rodada vencida ainda.")
+            if re.search(r"\b(fosseis|fossil)\b", p):
+                return {"achado": "O fóssil foi escavado! Logo outro aparece.",
+                        "escondido": "O fóssil ainda está enterrado. Continuem escavando!"}.get(
+                    e.get("fossil"), "Não há fóssil enterrado agora.")
+            n = int(e.get("tesouros_achados") or 0)
+            if e.get("tesouro") == "nenhum":
+                return "Não há tesouro escondido agora." + (f" Vocês acharam {n}." if n else "")
+            return (f"Vocês já acharam {n} {'tesouro' if n == 1 else 'tesouros'}." if n else
+                    "Ainda não acharam nenhum tesouro. Continuem cavando!")
+        # "para" só vale como verbo no começo ("para os peixes"), não como preposição ("solta os peixes para nós")
+        parar = re.search(r"^(pode |vamos |quero )?(para|pare)\b|\b(parar|tira|tirar|tire|desliga|desligar|desligue|"
+                          r"acaba|acabar|encerra|encerrar|chega de|some com)\b", p)
+        # voltar para a topografia
+        if re.search(r"\btopografia\b", p) or (re.search(r"\b(volta|voltar|volte)\b", p) and
+                                                 re.search(r"\b(areia|normal|relevo)\b", p)):
+            return self._areia_manda(acao, "/modo", {"modo": "original"}, "topografia")
+        if parar and re.search(r"\b(brincadeiras?|tesouros?|bau|peixes?|carros?|carrinhos?|animais|bichos|"
+                               r"labirinto|fosseis|fossil|dinossauros?|escavacao)\b", p):
+            return self._areia_manda(acao, "/brincar", {"acao": "parar"}, "parar")
+        if not re.search(self._VERBO_LIGA, p) and not re.search(r"\b(caca ao tesouro|labirinto de agua|tema)\b", p):
+            return None
+        # cores do relevo
+        for chave, tema in self.TEMAS_AREIA.items():
+            if re.search(rf"\b{chave}\b", p) and (re.search(r"\b(tema|cor|cores|areia|caixa|cenario)\b", p)
+                                                     or chave in ("vulcao", "inverno", "marte", "deserto", "oceano")):
+                r = self._areia_manda(acao, "/tema", {"tema": tema}, None)
+                return r or f"Pronto! A areia agora está no tema {self.NOMES_TEMAS[tema]}."
+        if re.search(r"\blabirinto\b", p):
+            novo = re.search(r"\b(outra|outro|nova|novo|proxima|proximo|troca|muda)\b", p)
+            return self._areia_manda(acao, "/brincar", {"acao": "labirintoNovo" if novo else "labirinto"},
+                                     "labirintoNovo" if novo else "labirinto")
+        if re.search(r"\b(fosseis|fossil|dinossauros?|escavacao|t rex|trex|triceratops|pterodactilo|ptero)\b", p):
+            tipo = next((v for k, v in self.FOSSEIS_AREIA.items() if re.search(rf"\b{k}\b", p)), "trex")
+            r = self._areia_manda(acao, "/brincar", {"acao": tipo}, None)
+            nome = {"trex": "um Tiranossauro Rex", "triceratops": "um Triceratops",
+                    "pterodactilo": "um Pterodáctilo", "pegada": "uma pegada gigante"}[tipo]
+            return r or f"Pronto! Enterrei o fóssil de {nome}. Escavem com cuidado!"
+        if re.search(r"\b(tesouros?|bau)\b", p):
+            return self._areia_manda(acao, "/brincar", {"acao": "tesouro"}, "tesouro")
+        peixe = re.search(r"\b(peixes?|peixinhos?)\b", p)
+        carro = re.search(r"\b(carros?|carrinhos?)\b", p)
+        if peixe or carro or re.search(r"\b(animais|bichos)\b", p):
+            qual = "todos" if (peixe and carro) or not (peixe or carro) else "peixes" if peixe else "carros"
+            return self._areia_manda(acao, "/brincar", {"acao": qual}, qual)
+        return None
+
+    def _areia_manda(self, acao, caminho, dados, fixa):
+        """Manda o comando em segundo plano (a resposta sai na hora; se der erro, o Willbert avisa
+        depois). Devolve a frase pronta (`fixa`) ou None para quem chamou montar a dele."""
+        if acao is None:
+            return "A caixa de areia não está ligada a mim agora."
+        if not acao(caminho, dados):
+            return "Não consegui falar com a caixa de areia agora."
+        return self.AREIA_FIXAS[fixa] if fixa else None
 
     # --- ações
     def _areia_rosto(self, p, f):
@@ -356,7 +461,8 @@ class Assistente:
     def _ajuda(self, p, f):
         if re.search(r"\bo que (voce|vc) (faz|sabe|pode)|\b(me ajuda|ajuda)\b", p):
             return ("Eu sei a hora e a data, quem está, quem chegou e quem saiu, quantas vezes alguém veio "
-                    "na semana, faço contas, conto piadas e gravo o seu rosto na areia. Para o resto, eu penso um pouco.")
+                    "na semana, faço contas, conto piadas, gravo o seu rosto na areia e ligo as brincadeiras da caixa de areia. "
+                    "Para o resto, eu penso um pouco.")
 
     def _obrigado(self, p, f):
         if re.fullmatch(r"(muito )?(obrigad[oa]|valeu|brigad[oa])( (willbert|wilbert))?", p):
@@ -364,7 +470,7 @@ class Assistente:
 
     def frases_fixas(self):
         """Respostas que não mudam: a voz delas fica em cache (da segunda vez em diante sai na hora)."""
-        textos = list(self.FIXAS) + list(self.PIADAS) + [self._ajuda("ajuda", None)]
+        textos = list(self.FIXAS) + list(self.PIADAS) + [self._ajuda("ajuda", None)] + list(self.AREIA_FIXAS.values())
         textos += list(self.acfg.get("thinking_phrases") or [])
         return [fala.para_fala(t, int(self.acfg.max_answer_chars)) for t in textos]
 

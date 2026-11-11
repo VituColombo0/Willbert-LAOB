@@ -138,7 +138,7 @@ class Detector:
             return
         llm = LLM(cfg.llm, cfg.assistant.name)
         self.assistente = Assistente(cfg, self.speaker, self.fatos, llm,
-                                     acoes={"areia_rosto": self.foto_para_areia})
+                                     acoes={"areia_rosto": self.foto_para_areia, "areia": self.areia})
         self.ouvido = Ouvido(cfg.assistant, cfg.stt, self.speaker, self.assistente.ouviu)
         self.ouvido.start()
         threading.Thread(target=llm.warmup, daemon=True, name="llm-warmup").start()
@@ -203,6 +203,26 @@ class Detector:
         if not url:
             return False
         threading.Thread(target=self._foto_para_areia, args=(nome, url), daemon=True, name="foto-areia").start()
+        return True
+
+    def areia(self, caminho, dados=None):
+        """Fala com o painel da caixa de areia (mesmo endereço do areia_url, sem o /foto).
+        Sem dados: GET rápido, devolve o JSON (ou None). Com dados: POST em segundo plano (a resposta
+        falada sai na hora) e devolve True; se falhar, o Willbert avisa em voz."""
+        base = str(self.cfg.assistant.get("areia_url") or "").rsplit("/foto", 1)[0].rstrip("/")
+        if not base:
+            return None if dados is None else False
+        if dados is None:
+            return painel_areia(base + caminho, timeout=3)
+        def manda():
+            r = painel_areia(base + caminho, dados, timeout=60)
+            if r is None:
+                self.speaker.speak_now("Não consegui mudar a caixa de areia. Ela está ligada?")
+            elif r.get("ok") is False:
+                self.speaker.speak_now("A caixa de areia não aceitou: " + str(r.get("msg") or "erro")[:120])
+            else:
+                log.info("areia %s %s: %s", caminho, dados, r.get("msg"))
+        threading.Thread(target=manda, daemon=True, name="areia").start()
         return True
 
     def _foto_para_areia(self, nome, url):
@@ -1070,6 +1090,29 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def painel_areia(url, dados=None, timeout=5):
+    """GET (dados None) ou POST JSON no painel da caixa de areia. Devolve o JSON da resposta (com
+    "ok": False quando o painel recusou) ou None se não conseguiu falar com ele."""
+    import json
+    import urllib.error
+    import urllib.request
+    corpo = None if dados is None else json.dumps(dados).encode()
+    req = urllib.request.Request(url, data=corpo, method="GET" if dados is None else "POST",
+                                 headers={"Content-Type": "application/json"} if corpo else {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read(65536) or b"{}")
+    except urllib.error.HTTPError as e:
+        try:
+            j = json.loads(e.read(65536) or b"{}")
+        except ValueError:
+            j = {}
+        return {**j, "ok": False}
+    except Exception as e:
+        log.warning("painel da caixa de areia: %s (%s)", url, e)
+        return None
 
 
 def multipart_foto(dados, nome_arquivo):

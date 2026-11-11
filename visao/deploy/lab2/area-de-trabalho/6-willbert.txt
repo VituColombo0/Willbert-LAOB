@@ -51,6 +51,20 @@ Ele fala "Sorria!", tira a foto e em uns 15 segundos você aparece na areia.
 (Para voltar a areia ao normal: use "Voltar para a topografia" na pasta 1 ou rode: areia-topografia)
 
 
+BRINCADEIRAS DA CAIXA DE AREIA PELA VOZ
+---------------------------------------
+    "Willbert, coloca o tema vulcão"        (também: neve, Marte, deserto, oceano,
+                                              arco-íris, mapa, clássico)
+    "Willbert, liga a caça ao tesouro"      "Willbert, quantos tesouros acharam?"
+    "Willbert, solta os peixes"             "Willbert, coloca os carrinhos"
+    "Willbert, solta os peixes e os carrinhos"
+    "Willbert, enterra um triceratops"      (ou T-Rex, pterodáctilo, pegada)
+    "Willbert, vamos brincar de labirinto de água"
+    "Willbert, outro labirinto"             "Willbert, a água chegou no labirinto?"
+    "Willbert, para as brincadeiras"        "Willbert, volta para a topografia"
+Ele responde na hora e a areia muda em um ou dois segundos.
+
+
 SITE DO WILLBERT (cadastro de membros e histórico)
 --------------------------------------------------
   No laboratório: http://192.168.0.139:8080 (ou neste computador: http://localhost:8080)

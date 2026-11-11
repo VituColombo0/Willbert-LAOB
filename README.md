@@ -86,7 +86,11 @@ Os membros são cadastrados pelo site (:8080), com fotos ou pela câmera.
 
 O lab2 também roda a caixa de areia com projetor (código em
 [Projetor-LAOB](https://github.com/VituColombo0/Projetor-LAOB)), então o Willbert fica desligado e
-só liga quando pedido. Os scripts de `visao/deploy/lab2/` (detalhes no README da pasta):
+só liga quando pedido. Ligado, ele comanda a caixa de areia pela voz ("Willbert, coloca o tema
+vulcão", "liga a caça ao tesouro", "solta os peixes", "labirinto de água", "volta para a topografia",
+"quantos tesouros acharam?"): regras locais em `assistente.py` (`_areia_comando`, sem LLM) que chamam
+o painel da areia em `http://127.0.0.1:8090` (`/tema`, `/brincar`, `/modo`, `/estado`) em segundo
+plano; se o painel recusar, ele avisa em voz. Os scripts de `visao/deploy/lab2/` (detalhes no README da pasta):
 
 | Script | Para quê |
 |---|---|

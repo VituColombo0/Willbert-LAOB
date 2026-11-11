@@ -252,4 +252,78 @@ from visao.llm import cortar_frase_incompleta
 check("resposta cortada pelo limite fica só com frases completas",
       cortar_frase_incompleta("A capital do Brasil é Brasília. Também é o") == "A capital do Brasil é Brasília.")
 check("resposta sem frase completa fica como está", cortar_frase_incompleta("Sim") == "Sim")
+# --- caixa de areia por voz: brincadeiras e cores pelo painel (Projetor-LAOB)
+mandados = []
+estado_areia = {"tesouro": "escondido", "tesouros_achados": 2, "fossil": "nenhum", "labirinto": "correndo",
+                "labirinto_rodadas": 1}
+def acao_areia(caminho, dados=None):
+    if dados is None:
+        return estado_areia
+    mandados.append((caminho, dados))
+    return True
+aa = Assistente(cfg, sp, fatos, LLM(cfg.llm), acoes={"areia": acao_areia, "areia_rosto": lambda n: True})
+casos_areia = [
+    ("Willbert, coloca o tema vulcão", ("/tema", {"tema": "vulcao"}), "vulcão"),
+    ("Willbert, transforma a areia em neve", ("/tema", {"tema": "inverno"}), "inverno"),
+    ("Willbert, muda as cores para arco-íris", ("/tema", {"tema": "arco-iris"}), "arco-íris"),
+    ("Willbert, liga a caça ao tesouro", ("/brincar", {"acao": "tesouro"}), "tesouro"),
+    ("Willbert, solta os peixes para a gente", ("/brincar", {"acao": "peixes"}), "peixes"),
+    ("Willbert, coloca os carrinhos", ("/brincar", {"acao": "carros"}), "carrinhos"),
+    ("Willbert, solta os peixes e os carrinhos", ("/brincar", {"acao": "todos"}), "Peixes no lago"),
+    ("Willbert, solta os bichos", ("/brincar", {"acao": "todos"}), "Peixes no lago"),
+    ("Willbert, vamos brincar de labirinto de água", ("/brincar", {"acao": "labirinto"}), "Labirinto de água ligado"),
+    ("Willbert, outro labirinto", ("/brincar", {"acao": "labirintoNovo"}), "Rodada nova"),
+    ("Willbert, enterra um triceratops", ("/brincar", {"acao": "triceratops"}), "Triceratops"),
+    ("Willbert, quero escavar um dinossauro", ("/brincar", {"acao": "trex"}), "Tiranossauro"),
+    ("Willbert, para as brincadeiras", ("/brincar", {"acao": "parar"}), "parei"),
+    ("Willbert, tira os peixes", ("/brincar", {"acao": "parar"}), "parei"),
+    ("Willbert, volta para a topografia", ("/modo", {"modo": "original"}), "topografia"),
+    ("Willbert, volta a areia ao normal", ("/modo", {"modo": "original"}), "topografia"),
+]
+for frase, esperado, trecho in casos_areia:
+    aa.follow_until = 0
+    n0 = len(mandados)
+    t0 = time.perf_counter()
+    r = aa.ouviu(frase)
+    ms = (time.perf_counter() - t0) * 1000
+    check(f"{frase!r} -> {esperado[1]}", mandados[n0:] == [esperado] and trecho in (r or ""), f"-> {r!r} {mandados[n0:]}")
+check("comando da areia responde na hora (sem LLM)", ms < 50, f"{ms:.1f} ms")
+for frase, trecho in (("Willbert, quantos tesouros vocês acharam?", "acharam dois tesouros"),
+                      ("Willbert, a água chegou no labirinto?", "ainda não chegou ao alvo. Vocês já venceram uma rodada."),
+                      ("Willbert, quantos fósseis acharam?", "Não há fóssil")):
+    aa.follow_until = 0
+    n0 = len(mandados)
+    r = aa.ouviu(frase)
+    check(f"placar {frase!r}", trecho in (r or "") and len(mandados) == n0, f"-> {r!r}")
+for frase in ("Willbert, grave o meu rosto", "Willbert, me coloca na areia"):
+    aa.follow_until = 0
+    n0 = len(mandados)
+    r = aa.ouviu(frase)
+    check(f"{frase!r} continua sendo a foto", r.startswith("Sorria") and len(mandados) == n0, f"-> {r!r}")
+aa.follow_until = 0
+check("frase sem pedido sobre a areia não vira comando",
+      aa._areia_comando(norm("o mar estava bonito ontem"), fatos()) is None)
+check("sem a caixa de areia ligada, avisa",
+      a.ouviu("Willbert, liga a caça ao tesouro") == "A caixa de areia não está ligada a mim agora.")
+check("frases da areia ficam com a voz em cache", all(t in aa._fixas for t in aa.AREIA_FIXAS.values()))
+# o detector conversa com o painel por HTTP (painel falso)
+from visao.detector import painel_areia
+class PainelFalso(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        self.send_response(200); self.end_headers(); self.wfile.write(b'{"labirinto": "nenhum"}')
+    def do_POST(self):
+        dados = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        ruim = dados.get("tema") == "xyz"
+        self.send_response(400 if ruim else 200); self.end_headers()
+        self.wfile.write(json.dumps({"ok": not ruim, "msg": "tema inválido" if ruim else "feito"}).encode())
+srv = ThreadingHTTPServer(("127.0.0.1", 0), PainelFalso)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+base = f"http://127.0.0.1:{srv.server_address[1]}"
+check("painel: GET do estado", painel_areia(base + "/estado") == {"labirinto": "nenhum"})
+check("painel: POST aceito", painel_areia(base + "/tema", {"tema": "vulcao"}) == {"ok": True, "msg": "feito"})
+check("painel: recusa vira ok False com o motivo", painel_areia(base + "/tema", {"tema": "xyz"}) ==
+      {"ok": False, "msg": "tema inválido"})
+srv.shutdown()
+check("painel desligado: None", painel_areia("http://127.0.0.1:9/estado", timeout=1) is None)
 print("TUDO OK" if ok else "HÁ FALHAS")
