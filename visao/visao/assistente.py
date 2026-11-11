@@ -2,8 +2,14 @@
 
 Fluxo: ouvido.py transcreve a fala -> aqui procuramos o nome do assistente ("Willbert") ->
 perguntas comuns têm resposta pronta e exata (hora, data, quem está, quem chegou, quando
-fulano veio) -> o resto vai para o LLM local com os fatos do laboratório -> fala.para_fala()
-deixa a resposta curta e falável -> alto-falante da câmera.
+fulano veio, comandos da caixa de areia) -> fala.para_fala() deixa a resposta curta e falável
+-> alto-falante da câmera.
+
+No lab2 (2026-11-11) o LLM foi desligado a pedido do Victor: num PC sem placa boa ele levava
+12-25 s e respondia mal quando o Whisper ouvia errado ("grado o meu gosto"). Agora só há
+comandos fixos; uma frase que não casa com nenhum é comparada com as frases conhecidas e vale
+a mais parecida (o Whisper erra letras, não a frase toda). Ainda dá para ligar um LLM
+(assistant.usar_llm = true) num PC com placa de vídeo.
 
 As respostas prontas não dependem do LLM: são instantâneas, nunca inventam e funcionam
 mesmo num PC fraco ou com o Ollama fora do ar.
@@ -24,6 +30,16 @@ log = logging.getLogger("visao.assistente")
 DIAS_SEMANA = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
 MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro",
          "outubro", "novembro", "dezembro")
+
+
+def falacao(t):
+    """Conversa de fundo que o Whisper transcreveu em laço ("o que ele tem, o que ele tem, ..."):
+    o mesmo trecho de 3 palavras repetido 3 vezes ou mais, ou frase longa demais para um pedido."""
+    pal = t.split()
+    if len(pal) > 40:
+        return True
+    tri = [" ".join(pal[i:i + 3]) for i in range(len(pal) - 2)]
+    return any(tri.count(x) >= 3 for x in set(tri))
 
 
 def norm(texto):
@@ -86,7 +102,7 @@ class Assistente:
         """Chamado pelo ouvido com cada frase transcrita. Retorna a resposta falada (ou None)."""
         ts = ts or time.time()
         t = norm(texto)
-        if not t:
+        if not t or falacao(t):
             return None
         chamado, resto = acha_nome(t, self.acfg.wake_words)
         if not chamado and ts > self.follow_until:
@@ -95,7 +111,11 @@ class Assistente:
             t0 = time.time()
             self.last_heard = texto
             fatos = self.fatos_fn()
-            resposta = self.responder(resto if chamado else t, fatos, so_nome=chamado and not resto)
+            resposta = self.responder(resto if chamado else t, fatos, so_nome=chamado and not resto,
+                                      chamado=bool(chamado))
+            if not resposta:  # continuação que não era com ele (conversa dos outros): silêncio
+                log.info("ouviu (sem comando, ignorado): %r", texto)
+                return None
             resposta = fala.para_fala(resposta, int(self.acfg.max_answer_chars))
             self.last_answer, self.last_ts = resposta, ts
             self.last_ms = int((time.time() - t0) * 1000)
@@ -133,15 +153,58 @@ class Assistente:
              "Hoje ainda não vi ninguém sair.", "Não vi nenhum membro por aqui na última meia hora.",
              "Ainda não consegui te reconhecer. Olha para a câmera.",
              "Hoje não apareceu ninguém de fora.", "Ontem não vi nenhum membro.")
+    NAO_ENTENDI = ("Não entendi. Você pode pedir, por exemplo: grave o meu rosto, que horas são, "
+                   "quem está aqui, ou coloca o tema vulcão.")
+    # Frases conhecidas (já sem acento). Quando nenhuma regra casa, vale a mais parecida com o que
+    # o Whisper escreveu: "grado o meu gosto" -> "grave o meu rosto".
+    FRASES = (
+        "grave o meu rosto", "tira uma foto minha", "me coloca na areia",
+        "que horas sao", "que dia e hoje", "qual a data de hoje", "quem esta aqui", "quem chegou hoje",
+        "quem saiu", "quem chegou primeiro", "quem veio ontem", "apareceu algum visitante hoje",
+        "coloca o tema vulcao", "coloca o tema inverno", "coloca o tema marte", "coloca o tema deserto",
+        "coloca o tema oceano", "coloca o tema arco iris", "coloca o tema mapa", "coloca o tema classico",
+        "liga a caca ao tesouro", "quantos tesouros acharam", "solta os peixes", "coloca os carrinhos",
+        "solta os peixes e os carrinhos", "vamos brincar de labirinto de agua", "outro labirinto",
+        "a agua chegou no labirinto", "enterra um dinossauro", "para as brincadeiras",
+        "volta para a topografia", "conta uma piada", "o que voce sabe fazer", "quem e voce",
+        "tudo bem", "bom dia", "boa tarde", "boa noite", "obrigado", "tchau", "repete",
+    )
+    PARECIDA_MIN = 0.8
 
-    def responder(self, pedido, fatos, so_nome=False):
+    def _regras(self, p, fatos):
+        for nome in self.REGRAS:
+            r = getattr(self, nome)(p, fatos)
+            if r:
+                return r
+        return None
+
+    def frase_parecida(self, p):
+        """A frase conhecida mais parecida com o que foi ouvido (inteiro, começo ou fim), ou None."""
+        palavras = p.split()
+        if not palavras or len(palavras) > 14:
+            return None
+        melhor, nota = None, 0.0
+        for f in self.FRASES:
+            k = len(f.split())
+            trechos = {p, " ".join(palavras[:k]), " ".join(palavras[-k:])}
+            r = max(SequenceMatcher(None, f, t).ratio() for t in trechos)
+            if r > nota:
+                melhor, nota = f, r
+        return melhor if nota >= self.PARECIDA_MIN else None
+
+    def responder(self, pedido, fatos, so_nome=False, chamado=True):
         quem = fatos.get("pessoa_falando")
         if so_nome:
             return f"Oi, {quem}! Pode falar." if quem else "Oi! Pode falar."
         p = norm(pedido)
-        for nome in self.REGRAS:
-            r = getattr(self, nome)(p, fatos)
+        r = self._regras(p, fatos)
+        if r:
+            return r
+        parecida = self.frase_parecida(p)
+        if parecida:
+            r = self._regras(parecida, fatos)
             if r:
+                log.info("entendi %r como %r", p, parecida)
                 return r
         if self.llm is not None and self.llm.enabled:
             # PC lento: se o LLM demorar, avisa em voz que está pensando (silêncio longo parece defeito)
@@ -160,7 +223,8 @@ class Assistente:
             if r:
                 return r
             return "Desculpe, não consegui pensar numa resposta agora. Pode perguntar de novo?"
-        return "Desculpe, ainda não sei responder isso."
+        # sem LLM: chamado pelo nome, explica o que dá para pedir; continuação solta, silêncio
+        return self.NAO_ENTENDI if chamado else None
 
     # --- conversa
     def _encerrar(self, p, f):
@@ -461,8 +525,7 @@ class Assistente:
     def _ajuda(self, p, f):
         if re.search(r"\bo que (voce|vc) (faz|sabe|pode)|\b(me ajuda|ajuda)\b", p):
             return ("Eu sei a hora e a data, quem está, quem chegou e quem saiu, quantas vezes alguém veio "
-                    "na semana, faço contas, conto piadas, gravo o seu rosto na areia e ligo as brincadeiras da caixa de areia. "
-                    "Para o resto, eu penso um pouco.")
+                    "na semana, faço contas, conto piadas, gravo o seu rosto na areia e ligo as brincadeiras da caixa de areia.")
 
     def _obrigado(self, p, f):
         if re.fullmatch(r"(muito )?(obrigad[oa]|valeu|brigad[oa])( (willbert|wilbert))?", p):
@@ -471,6 +534,7 @@ class Assistente:
     def frases_fixas(self):
         """Respostas que não mudam: a voz delas fica em cache (da segunda vez em diante sai na hora)."""
         textos = list(self.FIXAS) + list(self.PIADAS) + [self._ajuda("ajuda", None)] + list(self.AREIA_FIXAS.values())
+        textos.append(self.NAO_ENTENDI)
         textos += list(self.acfg.get("thinking_phrases") or [])
         return [fala.para_fala(t, int(self.acfg.max_answer_chars)) for t in textos]
 

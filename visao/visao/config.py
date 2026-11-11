@@ -135,6 +135,8 @@ DEFAULTS = {
         # como o Whisper costuma escrever o nome (comparação aproximada também é feita)
         "wake_words": ["willbert", "wilbert", "uilbert", "wilber", "uilber", "wilbur", "gilbert",
                        "vilbert", "will bert", "uil bert"],
+        "usar_llm": False,         # conversa livre pelo Ollama: só vale num PC com placa de vídeo boa
+                                   # (no lab2 ficava 12-25 s e respondia mal; Victor tirou em 2026-11-11)
         "follow_up_s": 10,         # depois de responder, escuta mais N s sem precisar do nome
         "audio_url": "rtsp://127.0.0.1:8554/camera",  # áudio da câmera pelo go2rtc
         "vad_aggressiveness": 2,   # 0-3: quanto maior, mais rigoroso para considerar "fala"
@@ -165,6 +167,7 @@ DEFAULTS = {
         "cpu_threads": 0,          # 0 = padrão do faster-whisper; o perfil usa núcleos - 1
         "download_root": "/opt/visao/models/whisper",
         # nomes que o Whisper deve reconhecer (ajuda a escrever certo)
+        # (as frases dos comandos são acrescentadas pelo ouvido: ajudam a ouvir "grave o meu rosto")
         "prompt": "Willbert, Victor, Gazziro, Mario, Lucas, laboratório.",
     },
     "telegram": {

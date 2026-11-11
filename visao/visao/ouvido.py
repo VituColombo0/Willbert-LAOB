@@ -15,6 +15,10 @@ import numpy as np
 
 from .camera import ErrosFfmpeg
 
+PROMPT_COMANDOS = ("Willbert, grave o meu rosto. Que horas são? Quem está aqui? Coloca o tema vulcão. "
+                   "Liga a caça ao tesouro. Solta os peixes e os carrinhos. Labirinto de água. "
+                   "Volta para a topografia.")
+
 log = logging.getLogger("visao.ouvido")
 
 
@@ -45,6 +49,8 @@ class Ouvido:
         self._q = collections.deque(maxlen=4)  # frases esperando transcrição
         self._q_ev = threading.Event()
         self.proc = None
+        # nomes + frases dos comandos: o Whisper tende a escrever o que já "viu" no prompt
+        self.prompt = (str(scfg.get("prompt") or "") + " " + PROMPT_COMANDOS).strip()
 
     def start(self):
         threading.Thread(target=self._load_and_transcribe, daemon=True, name="stt").start()
@@ -81,7 +87,7 @@ class Ouvido:
                 t0 = time.time()
                 segs, _ = self.model.transcribe(
                     audio, language="pt", beam_size=int(self.scfg.beam_size), vad_filter=False,
-                    condition_on_previous_text=False, initial_prompt=self.scfg.prompt,
+                    condition_on_previous_text=False, initial_prompt=self.prompt,
                     without_timestamps=True,
                     no_speech_threshold=0.6, temperature=0.0)
                 texto = " ".join(s.text.strip() for s in segs

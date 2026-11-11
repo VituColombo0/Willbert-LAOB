@@ -19,8 +19,10 @@ PY
 
 case "${1:-}" in
   ligar)
-    systemctl start ollama visao-go2rtc visao-detector visao-web
-    systemctl is-active ollama visao-go2rtc visao-detector visao-web | paste -sd' ' ;;
+    # sem LLM desde 2026-11-11 (só comandos fixos): o Ollama fica desligado e libera ~2 GB
+    systemctl stop ollama 2>/dev/null || true
+    systemctl start visao-go2rtc visao-detector visao-web
+    systemctl is-active visao-go2rtc visao-detector visao-web | paste -sd' ' ;;
   desligar)
     systemctl stop visao-detector visao-go2rtc ollama
     systemctl is-active ollama visao-go2rtc visao-detector | paste -sd' ' ;;

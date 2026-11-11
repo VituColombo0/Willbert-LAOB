@@ -161,7 +161,7 @@ check(f"resposta pronta em menos de 5 ms ({ms:.2f} ms)", ms < 5)
 # --- sem LLM: resposta honesta
 a.follow_until = 0
 r = a.ouviu("Willbert, qual a capital da França?", ts=time.time())
-check("sem LLM responde que não sabe", r == "Desculpe, ainda não sei responder isso.", f"-> {r!r}")
+check("sem LLM diz o que dá para pedir", r == a.NAO_ENTENDI, f"-> {r!r}")
 
 
 # --- LLM falso (imita o /api/chat do Ollama)
@@ -354,4 +354,34 @@ class CanoQuebrado(_io.RawIOBase):
 c = CanoQuebrado(bytes(range(50)))
 check("áudio em pedaços quebrados é juntado", le_exato(c, 20) == bytes(range(20)) and le_exato(c, 30) == bytes(range(20, 50)))
 check("fim de verdade do áudio é percebido", le_exato(c, 10) is None)
+# --- sem LLM: só comandos fixos, tolerantes a erro de escuta (casos reais do lab2, 2026-11-11)
+from visao.assistente import falacao
+fotos_sem = []
+sem = Assistente(cfg, sp, fatos, None, acoes={"areia_rosto": lambda n: fotos_sem.append(n) or True,
+                                              "areia": acao_areia})
+for ouvido_errado in ("Não. É que está ficando, né? Willbert, grave o meu gosto.",
+                      "Willbert, grado o meu rosto. Brate meu rosto.", "Willbert, grado o meu rosto.",
+                      "Wilbert, grava meu rosto"):
+    sem.follow_until = 0
+    t0 = time.perf_counter()
+    r = sem.ouviu(ouvido_errado)
+    ms = (time.perf_counter() - t0) * 1000
+    check(f"ouvido errado {ouvido_errado!r} -> foto na areia ({ms:.0f} ms)", (r or "").startswith("Sorria") and ms < 100, f"-> {r!r}")
+check("as 4 viraram foto", len(fotos_sem) == 4)
+sem.follow_until = 0
+n0 = len(mandados)
+r = sem.ouviu("Willbert, coloca o tema vucão")
+check("'tema vucão' -> vulcão", mandados[n0:] == [("/tema", {"tema": "vulcao"})], f"-> {r!r}")
+sem.follow_until = 0
+r = sem.ouviu("Willbert, qual é a capital da França?")
+check("pergunta fora dos comandos: explica o que dá para pedir, na hora", r == sem.NAO_ENTENDI, f"-> {r!r}")
+check("e essa resposta tem voz em cache", sem.NAO_ENTENDI in sem._fixas)
+sem.follow_until = time.time() + 30   # continuação sem dizer o nome
+check("conversa dos outros na continuação: silêncio", sem.ouviu("ontem o jogo foi muito bom") is None)
+check("pedido na continuação sem o nome ainda vale", bool(sem.ouviu("que horas são")))
+babel = "Você é um ex-venginho de ele, " + "o que ele tem, " * 30
+check("falação repetida do Whisper é ignorada", falacao(norm(babel)) and sem.ouviu("Willbert, " + babel) is None)
+check("frase normal não é falação", not falacao(norm("Willbert, liga a caça ao tesouro")))
+check("frase sem nada a ver não vira comando", sem.frase_parecida(norm("o mar estava bonito ontem")) is None)
+check("ajuda sem 'eu penso um pouco'", "penso" not in sem._ajuda("ajuda", None))
 print("TUDO OK" if ok else "HÁ FALHAS")

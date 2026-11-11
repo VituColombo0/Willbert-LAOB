@@ -136,14 +136,15 @@ class Detector:
         except ImportError as e:
             log.error("conversa desligada: falta dependência (%s)", e)
             return
-        llm = LLM(cfg.llm, cfg.assistant.name)
+        llm = LLM(cfg.llm, cfg.assistant.name) if cfg.assistant.get("usar_llm") else None
         self.assistente = Assistente(cfg, self.speaker, self.fatos, llm,
                                      acoes={"areia_rosto": self.foto_para_areia, "areia": self.areia})
         self.ouvido = Ouvido(cfg.assistant, cfg.stt, self.speaker, self.assistente.ouviu)
         self.ouvido.start()
-        threading.Thread(target=llm.warmup, daemon=True, name="llm-warmup").start()
+        if llm is not None:
+            threading.Thread(target=llm.warmup, daemon=True, name="llm-warmup").start()
         log.info("conversa ligada: diga '%s' perto da câmera (LLM %s, Whisper %s/%s, perfil %s)",
-                 cfg.assistant.name, cfg.llm.model or "nenhum", cfg.stt.model, cfg.stt.device,
+                 cfg.assistant.name, cfg.llm.model if llm else "desligado (só comandos)", cfg.stt.model, cfg.stt.device,
                  cfg.hardware.active)
 
     def fatos(self):

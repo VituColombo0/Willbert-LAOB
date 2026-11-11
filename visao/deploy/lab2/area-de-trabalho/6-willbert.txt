@@ -40,7 +40,9 @@ o nome. Para encerrar: "tchau".
     "Willbert, apareceu algum visitante hoje?"
     "Willbert, quanto é 7 vezes 8?"       "Willbert, conta uma piada"
     "Willbert, repete"                     "Willbert, o que você sabe fazer?"
-  Outras perguntas ele pensa um pouco antes de responder (alguns segundos).
+  Ele só entende os comandos desta lista (não conversa livremente): responde
+  na hora e, se não entender, diz o que dá para pedir. Se ele ouvir um pouco
+  errado, tudo bem: ele procura o comando mais parecido.
 
 
 FOTO NA CAIXA DE AREIA
