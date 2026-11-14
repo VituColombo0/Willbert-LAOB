@@ -30,7 +30,7 @@ da câmera e conversa com a caixa de areia do
 - **Anota as saídas:** quem some da câmera por mais de 30 min ganha uma "Saída" com a hora em que foi visto por último.
 - **Foto por gesto:** duas mãos abertas ao lado do rosto por 1,5 s → "Foto em três… Sorria!" → foto recortada (sem fundo) projetada na areia.
 - **Conversa** (quando ligada): chame "Willbert"; perguntas comuns (hora, data, quem está aqui, quem chegou, quem saiu, contas, piadas) têm resposta pronta em menos de 1 ms; o resto vai ao LLM local.
-- **Comanda a areia por voz:** "coloca o tema vulcão", "liga a caça ao tesouro", "solta os peixes", "vamos fazer uma corrida de rios", "vulcão em erupção", "coloca o barquinho", "outra rodada", "volta para a topografia".
+- **Comanda a areia por voz:** "coloca o tema vulcão", "liga a caça ao tesouro", "solta os peixes", "vamos fazer uma corrida de rios", "salve a vila", "vulcão em erupção", "outra rodada", "volta para a topografia".
 - **Fala clara:** números, horas e datas por extenso, frases curtas; voz Piper "Faber" em cache.
 - **Site** (:8080) com páginas Hoje, Ao vivo, Relatório, Membros e Revisão.
 - **Escolhe o perfil de hardware sozinho** (com ou sem GPU, CPU antiga, TV Box).
