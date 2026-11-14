@@ -199,4 +199,4 @@ Desenvolvido no **Laboratório LAOB**.
 
 ## Licença
 
-Uso interno do LAOB — todos os direitos reservados.
+Distribuído sob a licença MIT. Veja [LICENSE](LICENSE).
