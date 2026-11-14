@@ -1,124 +1,202 @@
-# Willbert
+# Willbert-LAOB
 
-Assistente de visão, voz e IA do laboratório, rodando num PC. É o sucessor do **Visão**, que
-nasceu no [Mini-Server](https://github.com/VituColombo0/Mini-Server) (TV Box RK322x):
-reconhece os membros pela câmera Tapo C200, cumprimenta pelo alto-falante da câmera,
-registra quem passou pelo laboratório e agora **conversa**: chame "Willbert" perto da câmera.
+> Assistente de visão e voz do Laboratório LAOB: reconhece os membros pela câmera, cumprimenta pelo nome, registra entradas e saídas e tira a foto da caixa de areia com um gesto.
 
-## O que ele faz
+![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![OpenCV](https://img.shields.io/badge/OpenCV-YuNet%20%2B%20SFace-5C3EE8) ![Câmera](https://img.shields.io/badge/câmera-Tapo%20C200-green) ![Plataforma](https://img.shields.io/badge/plataforma-Ubuntu%20x86__64-orange)
 
-- **Reconhece** os membros (YuNet + SFace), com várias pessoas ao mesmo tempo, aprendizado
-  contínuo e revisão automática (tudo herdado do Visão).
-- **Cumprimenta** uma vez por período (bom dia / boa tarde / boa noite), pelo nome, em dupla ou
-  o grupo. Com placa de vídeo, o cumprimento vem do LLM com contexto ("faz três dias que não te
-  via, Mario!"); se o LLM demorar mais de 1,5 s, sai a frase padrão.
-> **No lab2 (desde 2026-11-11) a conversa está desligada:** sem IA e sem microfone; a foto da areia é
-> pelo gesto das mãos e ele só fala frases prontas (cumprimentos e a contagem da foto). O que segue
-> sobre conversa vale para PCs com `assistant.enabled` e `gesture.keep_voice` (ou sem o gesto).
+## Sumário
 
-- **Conversa** pela câmera: microfone da Tapo -> detecção de voz -> Whisper -> resposta -> voz.
-  - Perguntas comuns têm resposta **pronta e exata**, local e instantânea (menos de 1 ms, sem LLM):
-    hora, data, dia da semana, mês/ano, ontem/amanhã; quem está aqui, quantos, quem chegou (primeiro,
-    por último), quem saiu, quem veio ontem; sobre um membro: veio hoje?, que horas chegou?, já foi
-    embora?, quantas vezes veio na semana?; visitantes de hoje; contas simples; piadas; quem é você;
-    oi/bom dia/tudo bem; repete; tchau (encerra a conversa). A voz das respostas fixas fica em cache.
-- **Anota as saídas**: quem some da câmera por mais que `session_gap_min` (30 min) ganha uma
-  "Saída" na página Hoje, com a hora em que foi visto pela última vez.
-  - O resto vai para o **LLM local** (Ollama), com os fatos do laboratório e a pedido de respostas
-    de no máximo duas frases.
-  - Depois de responder, escuta a continuação por 10 s sem precisar chamar pelo nome.
-  - Enquanto a câmera fala (e 0,6 s depois), o microfone é ignorado: ele não responde ao próprio eco.
-- **Fala clara**: toda resposta passa por `fala.para_fala()`: números, horas e datas por extenso
-  ("duas e meia da tarde"), sem markdown/emoji, curta e terminando em frase completa.
+- [Sobre](#sobre) · [Funcionalidades](#funcionalidades) · [Arquitetura](#arquitetura) · [Requisitos](#requisitos)
+- [Instalação](#instalação) · [Uso](#uso) · [Configuração](#configuração) · [Testes](#testes)
+- [Estrutura do projeto](#estrutura-do-projeto) · [Roadmap](#roadmap) · [Licença](#licença)
 
-## Hardware: escolhido sozinho
+## Sobre
 
-`visao/visao/hardware.py` detecta CPU, RAM e placa NVIDIA e escolhe o perfil
-(`visao-cli hardware` mostra; `[hardware] profile` no config.toml força outro):
+O Willbert é o sucessor do **Visão**, que nasceu no
+[Mini-Server-LAOB](https://github.com/VituColombo0/Mini-Server-LAOB) (TV Box). Ele roda num PC,
+observa o laboratório pela câmera Tapo C200, identifica quem chega e sai, fala pelo alto-falante
+da câmera e conversa com a caixa de areia do
+[Projetor-LAOB](https://github.com/VituColombo0/Projetor-LAOB). Tudo é local: sem nuvem.
 
-| Perfil | Quando | Reconhecimento | Fala (Whisper) | LLM (Ollama) | Cumprimento |
+> [!NOTE]
+> **No lab2 (desde nov/2026) ele funciona sem IA e sem microfone:** só frases prontas (cumprimentos
+> e a contagem da foto) e a foto da areia por gesto. O Ollama foi removido do lab2
+> (`remover-ollama.sh`). Conversa por voz e LLM continuam no código para PCs mais fortes.
+
+## Funcionalidades
+
+- **Reconhece** os membros (YuNet + SFace), várias pessoas ao mesmo tempo, com aprendizado contínuo e revisão.
+- **Cumprimenta** uma vez por período (bom dia / boa tarde / boa noite), pelo nome, em dupla ou o grupo.
+- **Anota as saídas:** quem some da câmera por mais de 30 min ganha uma "Saída" com a hora em que foi visto por último.
+- **Foto por gesto:** duas mãos abertas ao lado do rosto por 1,5 s → "Foto em três… Sorria!" → foto recortada (sem fundo) projetada na areia.
+- **Conversa** (quando ligada): chame "Willbert"; perguntas comuns (hora, data, quem está aqui, quem chegou, quem saiu, contas, piadas) têm resposta pronta em menos de 1 ms; o resto vai ao LLM local.
+- **Comanda a areia por voz:** "coloca o tema vulcão", "liga a caça ao tesouro", "solta os peixes", "volta para a topografia".
+- **Fala clara:** números, horas e datas por extenso, frases curtas; voz Piper "Faber" em cache.
+- **Site** (:8080) com páginas Hoje, Ao vivo, Relatório, Membros e Revisão.
+- **Escolhe o perfil de hardware sozinho** (com ou sem GPU, CPU antiga, TV Box).
+
+## Arquitetura
+
+```mermaid
+flowchart LR
+    CAM["Tapo C200<br/>vídeo RTSP · áudio"] --> GO["visao-go2rtc"]
+    GO --> DET["visao-detector<br/>rostos · gesto · presença"]
+    DET --> DB[("Banco SQLite<br/>/opt/visao/data")]
+    DET --> FALA["Fala (Piper)"] --> GO
+    GO -->|alto-falante| CAM
+    DET -->|POST /foto| AREIA["Painel da areia<br/>127.0.0.1:8090"]
+    DB --> WEB["visao-web :8080"]
+    MIC["Microfone (opcional)"] -.-> WH["Whisper"] -.-> AS["assistente.py<br/>respostas prontas · LLM"]
+    AS -.-> FALA
+```
+
+**Perfis de hardware** (`visao/visao/hardware.py`; `visao-cli hardware` mostra o escolhido):
+
+| Perfil | Quando | Reconhecimento | Whisper | LLM (Ollama) | Cumprimento |
 |---|---|---|---|---|---|
 | `gpu-forte` | NVIDIA 10+ GB | 1280 px, todo quadro | large-v3-turbo (GPU) | qwen3:8b | com contexto (LLM) |
 | `gpu` | NVIDIA 6–10 GB | 1280 px, todo quadro | large-v3-turbo (GPU, int8) | qwen3:4b | com contexto (LLM) |
-| `cpu-forte` | sem NVIDIA, 8+ núcleos, 16+ GB | 1280 px, todo quadro | small (CPU, int8) | qwen3:4b | frase pronta, voz na hora |
-| `cpu` | PC sem placa, até 7 núcleos | 960 px, 1 a cada 2 | small (CPU, int8) | qwen3:1.7b | frase pronta, voz na hora |
-| `cpu-basico` | PC antigo (sem AVX2 ou 4 núcleos) | 960 px, 1 a cada 2 | base (CPU, int8) | qwen3:1.7b (3 threads) | frase pronta, voz na hora |
+| `cpu-forte` | 8+ núcleos, 16+ GB | 1280 px, todo quadro | small (CPU, int8) | qwen3:4b | frase pronta |
+| `cpu` | até 7 núcleos | 960 px, 1 a cada 2 | small (CPU, int8) | qwen3:1.7b | frase pronta |
+| `cpu-basico` | sem AVX2 ou 4 núcleos | 960 px, 1 a cada 2 | base (CPU, int8) | qwen3:1.7b | frase pronta |
 | `tvbox` | ARM com 1 GB | 576 px, 1 a cada 4 | — | — | frases geradas antes |
 
-Placas NVIDIA antigas (compute capability abaixo de 7.0, como a GTX 750 Ti) não contam como
-GPU: o faster-whisper atual não roda nelas e o Ollama só as usa pelo Vulkan, bem mais devagar
-que a CPU. O LLM e o Whisper usam um núcleo a menos que a máquina tem (com todos, a disputa
-com outros programas deixa o LLM quase parado). Se o LLM passar de 1,8 s, ele fala
-"Só um instante." para a espera não parecer defeito.
+Placas NVIDIA com compute capability abaixo de 7.0 (como a GTX 750 Ti) não contam como GPU: o
+faster-whisper atual não roda nelas.
 
-Medido no PC do laboratório (i5-3330, 4 núcleos sem AVX2, GTX 750 Ti, junto com o SARndbox):
+## Requisitos
+
+- PC Ubuntu/Debian x86_64 (testado num i5-3330, 4 núcleos, 15 GB, GTX 750 Ti).
+- Câmera TP-Link Tapo C200 com **"Compatibilidade com terceiros"** ligada no app (para o áudio).
+- Python 3.10+, FFmpeg (4.x ou 5.1+) e acesso `sudo` para a instalação.
+
+**Desempenho medido no lab2** (junto com o SARndbox):
 
 | Etapa | Tempo |
 |---|---|
-| Detecção de rosto (YuNet 960 px, 2 threads) | ~50 ms por quadro |
+| Detecção de rosto (YuNet 960 px) | ~50 ms por quadro |
 | Identificação (SFace) | ~35 ms por rosto |
-| Fala -> texto (Whisper base) | ~2,5 s por frase (small: ~9 s, inviável) |
-| Resposta pronta (hora, quem chegou...) | instantânea |
-| Resposta do LLM (qwen3:1.7b) | 4–10 s |
-| Voz (Piper Faber "calma", frase curta) | ~1,4 s |
+| Resposta pronta | < 1 ms |
+| Voz (Piper Faber, frase curta) | ~1,4 s |
+| Fala → texto (Whisper base) | ~2,5 s por frase |
 
-Qwen3 foi escolhido por ser o melhor modelo local pequeno em português do Brasil
-([comparativo](https://www.promptquorum.com/local-llms/best-local-llms-portuguese-language-2026));
-é chamado sem "pensar" (`think: false`) para responder rápido.
+## Instalação
 
-## Instalação no PC (Ubuntu/Debian x86_64)
+1. Clone o repositório:
+
+   ```bash
+   git clone https://github.com/VituColombo0/Willbert-LAOB.git
+   ```
+
+2. Rode o instalador (driver NVIDIA se faltar, Whisper, Piper, go2rtc, serviços; o Ollama só nos perfis com LLM):
+
+   ```bash
+   cd Willbert-LAOB && sudo bash visao/deploy/install-pc.sh
+   ```
+
+3. Configure câmera, conta Tapo e senha do site (as senhas são digitadas escondidas):
+
+   ```bash
+   sudo bash visao/deploy/lab2/configurar.sh
+   ```
+
+4. Cadastre os membros pelo site (`http://<IP-DO-PC>:8080`), com fotos ou pela câmera.
+
+> [!IMPORTANT]
+> Senhas (câmera, conta Tapo, site) ficam só em `/opt/visao/config.toml`, fora do git.
+> Teste a câmera uma vez só: a Tapo bloqueia o acesso depois de várias falhas de login.
+
+## Uso
+
+**No lab2** o Willbert fica desligado e só liga quando pedido:
 
 ```bash
-git clone https://github.com/VituColombo0/Willbert.git && cd Willbert
-sudo bash visao/deploy/install-pc.sh
+willbert ligar
 ```
 
-O instalador: instala o driver NVIDIA se houver placa sem driver (pede reiniciar e rodar de
-novo), o Ollama com o modelo do perfil, o Whisper, o Piper (voz Faber), o go2rtc e os serviços
-`visao-go2rtc`, `visao-detector` e `visao-web` (:8080). Pode rodar de novo para atualizar.
+| Comando | O que faz |
+| :--- | :--- |
+| `willbert ligar` / `desligar` / `estado` | Liga, desliga ou mostra o estado |
+| `sudo -n /usr/local/sbin/willbert-controle testar-camera` | Testa a câmera |
+| `sudo -n /usr/local/sbin/willbert-controle foto` | Tira uma foto |
+| `visao-cli hardware` | Mostra o perfil escolhido |
+| `visao-cli conversar --mudo` | Conversa digitando (sem câmera) |
 
-Depois, a câmera, a conta Tapo e a senha do site (as senhas são digitadas escondidas e ficam
-só no `/opt/visao/config.toml`):
+Na Área de Trabalho do lab2, a pasta **"6 - Willbert"** tem atalhos de dois cliques (ligar,
+desligar, ver estado, abrir o site) e um `COMO USAR.txt`.
 
-```bash
-sudo bash visao/deploy/lab2/configurar.sh
-```
-
-Os membros são cadastrados pelo site (:8080), com fotos ou pela câmera.
-
-## No lab2 (PC do laboratório)
-
-O lab2 também roda a caixa de areia com projetor (código em
-[Projetor-LAOB](https://github.com/VituColombo0/Projetor-LAOB)), então o Willbert fica desligado e
-só liga quando pedido. **Desde 2026-11-11 a foto da areia é por gesto** (as duas mãos abertas ao lado do
-rosto por 1,5 s: `visao/gesto.py`, detector de palmas do opencv_zoo) e o microfone fica desligado
-(`gesture.keep_voice`); sem IA (`assistant.usar_llm`). Com a voz ligada, ele comanda a caixa de areia pela voz ("Willbert, coloca o tema
-vulcão", "liga a caça ao tesouro", "solta os peixes", "labirinto de água", "volta para a topografia",
-"quantos tesouros acharam?"): regras locais em `assistente.py` (`_areia_comando`, sem LLM) que chamam
-o painel da areia em `http://127.0.0.1:8090` (`/tema`, `/brincar`, `/modo`, `/estado`) em segundo
-plano; se o painel recusar, ele avisa em voz. Os scripts de `visao/deploy/lab2/` (detalhes no README da pasta):
+**Scripts do lab2** (`visao/deploy/lab2/`, detalhes no [README da pasta](visao/deploy/lab2/README.md)):
 
 | Script | Para quê |
 |---|---|
-| `configurar.sh` | câmera, conta Tapo e site, do zero |
-| `otimizar.sh` / `desfazer.sh` | desempenho do PC para o SARndbox + Willbert (reversível) |
-| `willbert-controle` | liga/desliga/estado/testar-camera/foto sem senha (`sudo -n`) |
+| `configurar.sh` | Câmera, conta Tapo e site, do zero |
+| `atualizar-app.sh` | Atualiza o app instalado em `/opt/visao` |
+| `otimizar.sh` / `desfazer.sh` | Desempenho do PC para SARndbox + Willbert (reversível) |
+| `kernel-com-driver.sh` | Fixa o GRUB num kernel que tem o driver NVIDIA |
+| `remover-ollama.sh` | Remove o Ollama |
+| `instalar-atalhos.sh` | Atalhos da Área de Trabalho |
 
-## Testes (sem câmera)
+## Configuração
+
+Arquivo `/opt/visao/config.toml` (modelo em [visao/config.example.toml](visao/config.example.toml)):
+
+| Opção | Valor no lab2 | Descrição |
+| :--- | :--- | :--- |
+| `[hardware] profile` | `auto` (detecta `cpu-basico`) | Força outro perfil |
+| `[assistant] usar_llm` | `false` | Usa ou não o LLM |
+| `[gesture] keep_voice` | `false` | Mantém microfone e Whisper com o gesto ligado |
+| `[presence] session_gap_min` | `30` | Minutos sem ver alguém para registrar a saída |
+
+## Testes
+
+Sem câmera, a partir da pasta `visao`:
 
 ```bash
-cd visao
-python -m tests.test_conversa   # nome do assistente, respostas prontas, LLM simulado, perfis, fala
-python -m tests.sim_multi       # várias pessoas, cumprimentos por período, aprendizado
-visao-cli conversar --mudo      # no PC instalado: digite perguntas e veja as respostas
+python -m tests.test_conversa
 ```
 
-## Próximos passos (depois de ver o PC funcionando)
+```bash
+python -m tests.sim_multi
+```
 
-- Medir o tempo real e trocar o SFace por ArcFace/InsightFace se houver GPU (mais preciso de lado e de longe).
+```bash
+python -m tests.test_foto
+```
+
+Testam respostas prontas, LLM simulado, perfis e fala; várias pessoas, cumprimentos por período e
+aprendizado; e o tratamento da foto do gesto. Passam quando terminam com `TUDO OK`.
+
+## Estrutura do projeto
+
+```text
+Willbert-LAOB/
+└── visao/
+    ├── visao/
+    │   ├── detector.py · tracker.py · faces.py · enroll.py   # reconhecimento
+    │   ├── presence.py · reports.py · db.py                  # presença e relatórios
+    │   ├── gesto.py · foto.py                                # gesto e foto da areia
+    │   ├── assistente.py · fala.py · llm.py · ouvido.py      # conversa e voz
+    │   ├── speaker.py · camera.py · notify.py                # câmera e alto-falante
+    │   ├── hardware.py · config.py · cli.py                  # perfis, config, visao-cli
+    │   └── web.py · templates/ · static/                     # site :8080
+    ├── deploy/                  # install-pc.sh, serviços systemd, visao-cli
+    │   └── lab2/                # scripts e atalhos do PC do laboratório
+    └── tests/                   # testes sem câmera
+```
+
+## Roadmap
+
+- Trocar o SFace por ArcFace/InsightFace em PC com GPU (mais preciso de lado e de longe).
 - Relatórios em linguagem natural ("resumo da semana").
 - Backup diário do banco (`/opt/visao/data`).
 
-## Segredos
+## Equipe
 
-Senhas (câmera, conta Tapo, login web) ficam só no `config.toml` da máquina, fora do git.
+Desenvolvido no **Laboratório LAOB**.
+
+- Victor Colombo
+- Prof. Mario Gazziro
+
+## Licença
+
+Uso interno do LAOB — todos os direitos reservados.
