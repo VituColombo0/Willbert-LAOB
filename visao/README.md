@@ -34,8 +34,11 @@ Tapo C200 ──RTSP 720p──▶ ffmpeg (decodifica ~4 qps) ──▶ detector
    a primeira vez); a mesma pessoa só gera um aviso no Telegram por dia. Rostos que não deu
    para decidir vão para a página **Revisão**.
 7. **Aprendizado contínuo:** quando a certeza é alta, o sistema guarda novas amostras do membro
-   até a base do membro ficar completa (25 amostras); depois disso para de capturar o rosto dele, acompanhando a luz real do laboratório e mudanças
-   de visual. Corrigir uma identificação errada (página Hoje → "corrigir") desfaz o que foi
+   até 50 amostras, **espalhadas no tempo**: as 8 primeiras logo (para reconhecer rápido); depois,
+   no máximo 1 a 3 por dia (quantidade sorteada), em momentos sorteados entre 07h e 23h, com pelo
+   menos 2 h entre uma e outra — assim entram roupas, luz, cabelo e óculos de dias diferentes.
+   Com 50, não para: troca 1 por dia a amostra aprendida mais repetida entre as mais antigas (as
+   fotos do cadastro nunca saem). Corrigir uma identificação errada (página Hoje → "corrigir") desfaz o que foi
    aprendido naquela identificação e ensina o rosto à pessoa certa. Membro com poucas amostras
    (menos de 8) aprende mais rápido, até formar uma base boa; a página Membros avisa quem
    precisa de "Capturar pela câmera". Quem só tem a foto de celular do cadastro também é

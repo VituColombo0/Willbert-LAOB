@@ -293,7 +293,8 @@ class OnvifWatcher:
                 except Exception:
                     ptz = None
                 pp = cam.create_pullpoint_service()
-                self.state, self.motion_on, backoff = "ok", False, 5
+                self.state, self.motion_on = "ok", False
+                conectou = time.time()
                 log.info("ONVIF conectado (eventos%s)", " + PTZ" if ptz else "")
                 last_ptz = 0.0
                 while not self._halt.is_set():
@@ -303,6 +304,8 @@ class OnvifWatcher:
                     msgs = pp.PullMessages({"Timeout": timedelta(seconds=1), "MessageLimit": 50})
                     for m in getattr(msgs, "NotificationMessage", None) or []:
                         self._on_message(m)
+                    if backoff != 5 and time.time() - conectou > 60:
+                        backoff = 5  # só volta ao intervalo curto depois de 1 min estável
             except Exception as e:
                 self.state = f"erro: {type(e).__name__}"
                 log.warning("ONVIF: %s; reconectando em %ss", e, backoff)

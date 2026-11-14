@@ -1,5 +1,6 @@
 """Simulação dos cenários com várias pessoas (sem câmera): python -m tests.sim_multi"""
 import logging, time
+from datetime import datetime
 import numpy as np
 from visao import db
 from visao.config import load
@@ -133,23 +134,89 @@ seen, first, today = d.visitor_history(emb_of(9, 0.85), t0)
 check("visitante de ontem: 'já visto 1 vez', sem marcar aviso de hoje", seen == 1 and not today)
 seen, _, _ = d.visitor_history(emb_of(2, 0.9), t0)
 check("outra pessoa não é confundida com o visitante", seen == 0)
-# 9) membro com a base completa: não captura mais o rosto dele; com poucas amostras, captura
+# 9) quem aprende sozinho: modo cauteloso e fase inicial (poucas amostras, aprende rápido)
 d = make(); added = []
 d.add_sample = lambda mid, *a: added.append(mid)
-d.last_auto = {}
+d.last_auto = {}; d.data = "/tmp"
 d.gallery.matrix = np.stack([emb_of(1, 0.9) for _ in range(25)] + [base[2]]).astype(np.float32)
 d.gallery.labels = np.array([1] * 25 + [2])
-def fotos(mid, n):  # amostras cadastradas por gente (foto/câmera)
+def fotos(d, mid, n, src="foto", ts=0.0):  # amostras no banco (foto/câmera = cadastro; auto = aprendida)
     for _ in range(n):
-        d.con.execute("INSERT INTO samples(member_id, source, status, created_at) VALUES(?, 'foto', 'ok', 0)", (mid,))
-fotos(1, 3); fotos(2, 1)
+        d.con.execute("INSERT INTO samples(member_id, source, status, created_at, embedding) VALUES(?, ?, 'ok', ?, ?)",
+                      (mid, src, ts, db.emb_to_blob(emb_of(mid, 0.6))))
+fotos(d, 1, 3); fotos(d, 2, 1)
 d.cfg.detection["min_manual"] = 3   # modo cauteloso
 Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0)
 check("modo cauteloso (min_manual 3): Gazziro com 1 foto não aprende sozinho", added == [])
 d.cfg.detection["min_manual"] = 1   # padrão: aprende desde o cadastro
-Detector.maybe_auto_enrich(d, 1, emb_of(1, 0.6), None, {"q": 0.9}, 0.6, t0)
 Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0)
-check("base completa (25): Victor não é mais capturado; Gazziro (1 foto) é", added == [2])
+check("fase inicial: Gazziro (1 foto) aprende na hora", added == [2])
+Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0 + 10)
+check("fase inicial: no máximo 1 a cada 30 s", added == [2])
+Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.35, t0 + 60)
+check("certeza baixa (0,35) não vira amostra", added == [2])
+
+# 9b) depois da fase inicial: até 50, poucas por dia, em momentos sorteados, 2 h de intervalo
+def aprendiz(n_amostras, n_auto=0, auto_ts=0.0):
+    """Detector com o Victor tendo n_amostras na galeria (n_auto delas aprendidas)."""
+    d = make(); d.data = "/tmp"; d.last_auto = {}; d.add_sample_real = d.add_sample = None
+    d.gallery.matrix = np.stack([emb_of(1, 0.6) for _ in range(n_amostras)]).astype(np.float32)
+    d.gallery.labels = np.array([1] * n_amostras)
+    fotos(d, 1, n_amostras - n_auto); fotos(d, 1, n_auto, "auto", auto_ts)
+    def add(mid, src, aligned, emb, q, ts, msg):
+        d.con.execute("INSERT INTO samples(member_id, source, status, created_at, embedding) VALUES(?, ?, 'ok', ?, ?)",
+                      (mid, src, ts, db.emb_to_blob(emb)))
+        d.gallery.matrix = np.vstack([d.gallery.matrix, emb[None]]); d.gallery.labels = np.append(d.gallery.labels, mid)
+    d.add_sample = add
+    return d
+def dia(dd, h=0, m=0):
+    return time.mktime((2026, 11, dd, h, m, 0, 0, 0, -1))
+def n_auto(d, desde=0.0):
+    return d.con.execute("SELECT COUNT(*) FROM samples WHERE source='auto' AND created_at >= ?", (desde,)).fetchone()[0]
+def passa_o_dia(d, dd, cada_min=10):
+    """O Victor fica o dia todo na frente da câmera, reconhecido com certeza alta a cada 10 min."""
+    for k in range(0, 24 * 60, cada_min):
+        ts = dia(dd, k // 60, k % 60)
+        Detector.maybe_auto_enrich(d, 1, emb_of(1, 0.6), None, {"q": 0.9}, 0.6, ts)
+    return n_auto(d, dia(dd))
+
+d = aprendiz(20)
+mom = d.momentos_do_dia(1, datetime.fromtimestamp(dia(16)))
+hoje = passa_o_dia(d, 16)
+check(f"dia inteiro na frente da câmera: aprende {hoje} = momentos sorteados ({len(mom)}), máx. 3", hoje == len(mom) and 1 <= hoje <= 3)
+ts_aut = [r[0] for r in d.con.execute("SELECT created_at FROM samples WHERE source='auto' ORDER BY created_at")]
+check("entre duas amostras do mesmo dia: pelo menos 2 h", all(b - a >= 7200 for a, b in zip(ts_aut, ts_aut[1:])))
+check("nenhuma antes do primeiro momento sorteado nem fora das 07h-23h",
+      all(7 * 60 <= (datetime.fromtimestamp(t).hour * 60 + datetime.fromtimestamp(t).minute) < 23 * 60 for t in ts_aut)
+      and datetime.fromtimestamp(ts_aut[0]).hour * 60 + datetime.fromtimestamp(ts_aut[0]).minute >= int(mom[0]))
+dias = [d.momentos_do_dia(1, datetime.fromtimestamp(dia(x))) for x in range(1, 15)]
+check("os momentos mudam de um dia para o outro", len({tuple(round(m) for m in x) for x in dias}) > 10)
+check("a quantidade por dia também varia (1 a 3)", {len(x) for x in dias} - {1, 2, 3} == set() and len({len(x) for x in dias}) > 1)
+check("membros diferentes têm momentos diferentes no mesmo dia",
+      d.momentos_do_dia(1, datetime.fromtimestamp(dia(16))) != d.momentos_do_dia(2, datetime.fromtimestamp(dia(16))))
+check("reiniciar o serviço não muda o sorteio",
+      make().momentos_do_dia(1, datetime.fromtimestamp(dia(16))) == mom)
+d2 = aprendiz(20); d2.last_auto = {}
+fotos(d2, 1, 1, "auto", dia(16, 6))   # aprendeu às 06h (antes de reiniciar)
+Detector.maybe_auto_enrich(d2, 1, emb_of(1, 0.6), None, {"q": 0.9}, 0.6, dia(16, 7, 30))
+check("intervalo de 2 h vale mesmo depois de reiniciar (lê do banco)", n_auto(d2, dia(16, 7)) == 0)
+
+# 9c) base cheia (50): não para; troca no máximo 1 por dia, só aprendida, a mais repetida entre as antigas
+d = aprendiz(50, n_auto=40, auto_ts=dia(1, 12))
+for x in range(16, 20): passa_o_dia(d, x)
+tot = d.con.execute("SELECT COUNT(*) FROM samples WHERE status='ok'").fetchone()[0]
+cad = d.con.execute("SELECT COUNT(*) FROM samples WHERE source!='auto'").fetchone()[0]
+check(f"base cheia: continua com 50 ({tot}) e trocou 1 por dia em 4 dias ({n_auto(d, dia(16))})",
+      tot == 50 and n_auto(d, dia(16)) == 4)
+check("as 10 fotos do cadastro nunca são trocadas", cad == 10)
+d = aprendiz(50, n_auto=40, auto_ts=dia(1, 12))
+rep = emb_of(1, 0.6)  # duas amostras antigas iguais: uma delas é a primeira a sair
+ids = [r[0] for r in d.con.execute("SELECT id FROM samples WHERE source='auto' ORDER BY id LIMIT 2")]
+for i in ids:
+    d.con.execute("UPDATE samples SET embedding=? WHERE id=?", (db.emb_to_blob(rep), i))
+sai = d.escolhe_para_trocar(1, d.con.execute("SELECT id, crop_path, embedding FROM samples WHERE source='auto' "
+                                             "ORDER BY created_at").fetchall(), 1)
+check("troca a amostra antiga mais repetida", [r["id"] for r in sai][0] in ids)
 # 10) modo "1 por dia": na sala há 2 h (passou da meia-noite), não cumprimenta no "novo dia"
 d = make(); d.cfg.greeting["once_per"] = "dia"
 d.presence.seen(1, t0 - 7200, 0.6)
@@ -165,9 +232,9 @@ f1 = sp.phrase(["Victor", "Gazziro"], 2, 15, 0); f2 = sp.phrase(["Gazziro", "Vic
 check(f"dupla com ordem fixa dos nomes: '{f1}'", f1 == f2 == "Boa tarde, Gazziro e Victor!")
 check("sozinho de manhã: " + sp.phrase(["Mario"], 1, 9, 0), sp.phrase(["Mario"], 1, 9, 0) == "Bom dia, Mario! Que bom te ver.")
 check("3 pessoas à noite: " + sp.phrase(["Mario"], 3, 20, 0), sp.phrase(["Mario"], 3, 20, 0) == "Boa noite, pessoal! Que bom ver vocês.")
-# 12) Gazziro só com a foto do cadastro: leituras baixas (0,30) mas consistentes identificam
+# 12) Gazziro só com a foto do cadastro: leituras baixas (0,31) mas consistentes identificam
 d = make(); d.speaker.said.clear()
-for i in range(4): step(d, t0 + i, [(100, 2, 0.30)])
+for i in range(4): step(d, t0 + i, [(100, 2, 0.31)])  # 0,31: 0,30 exato fica abaixo da média em float32
 check("poucas amostras: 3+ leituras consistentes identificam o Gazziro", list(names(d).values()) == ["Gazziro"])
 
 # 13) visitante com leituras baixas e espalhadas não vira membro por consenso

@@ -15,6 +15,10 @@ password = "SENHA_DA_CAMERA"
 # unknown = 0.26         # abaixo disso a leitura conta para o alerta de desconhecido
 # min_face_px = 36       # rostos menores que isso são ignorados para reconhecimento
 # auto_enrich = true     # aprende novas amostras quando a certeza é alta
+# enrich_until = 50      # amostras por membro; cheio, troca a antiga mais repetida (não para)
+# enrich_per_day = 3     # depois das 8 primeiras: no máx. 1 a 3 por dia (sorteado), em momentos
+# enrich_gap_h = 2.0     # sorteados dentro de enrich_hours, com N horas entre uma e outra
+# enrich_hours = "07:00-23:00"
 
 [presence]
 # Sem ver a pessoa por esse tempo, considera que ela saiu (a saída fica

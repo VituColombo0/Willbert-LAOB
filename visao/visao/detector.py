@@ -14,6 +14,7 @@ import glob
 import os
 import subprocess
 import queue
+import random
 import re
 import shutil
 import signal
@@ -315,6 +316,13 @@ class Detector:
                                 "-update", "1", "-f", "image2", "-c:v", "bmp", saida],
                                capture_output=True, timeout=15)
             img = cv2.imread(saida) if os.path.exists(saida) else None
+            if img is None:
+                # o último pedaço ainda está sendo gravado e o fim pode vir cortado: o filtro não
+                # sobra quadro nenhum. Decodifica do quadro-chave até onde der e fica com o último.
+                r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-y", "-ss", f"{chave - inicio:.3f}",
+                                    "-i", seg, "-an", "-update", "1", "-f", "image2", "-c:v", "bmp", saida],
+                                   capture_output=True, timeout=15)
+                img = cv2.imread(saida) if os.path.exists(saida) else None
             if img is None:
                 log.warning("quadro em 1080p: ffmpeg não gerou imagem (código %s)", r.returncode)
             return img
@@ -1161,8 +1169,6 @@ class Detector:
         if (not dc.hard_learn or h is None or not h.get("learn") or h["guess"] != t.member_id
                 or ts - h["ts"] > 20):
             return
-        if self.gallery.member_sims(t.member_id, emb).size >= dc.enrich_until:
-            return  # base do membro já completa
         if not self.pode_aprender(t.member_id):
             return
         if float(h["emb"] @ emb) < 0.20:
@@ -1170,8 +1176,10 @@ class Detector:
         sims = self.gallery.member_sims(t.member_id, h["emb"])
         if sims.size and float(sims.max()) >= 0.80:
             return
-        self.add_sample(t.member_id, "auto", h["aligned"], h["emb"], h["q"], ts,
-                        f"ângulo difícil aprendido (era {h['score']:.2f})")
+        if not self.hora_de_aprender(t.member_id, sims.size, ts):
+            return  # fora dos momentos sorteados do dia (ou já aprendeu o bastante hoje)
+        self.guarda_aprendida(t.member_id, h["aligned"], h["emb"], h["q"], ts,
+                              f"ângulo difícil aprendido (era {h['score']:.2f})")
         log.info("aprendeu ângulo difícil de %s (%.2f)", self.gallery.names.get(t.member_id), h["score"])
 
     def manual_samples(self, member_id):
@@ -1183,36 +1191,118 @@ class Detector:
         return self.manual_samples(member_id) >= int(self.cfg.detection.get("min_manual", 3))
 
     def maybe_auto_enrich(self, member_id, emb, aligned, q, score, ts, boot=False):
+        """Reconhecimento de alta certeza vira amostra nova do membro, mas espalhada no tempo
+        (ver hora_de_aprender). Com a base cheia (enrich_until), troca em vez de parar."""
         dc = self.cfg.detection
         if not self.pode_aprender(member_id):
             return  # poucas fotos cadastradas: um engano viraria amostra do membro errado
         sims = self.gallery.member_sims(member_id, emb)
-        if sims.size >= dc.enrich_until:
-            return  # base do membro já completa: para de capturar o rosto dele
         # membro com poucas amostras (só a foto do cadastro): aprende mais rápido, com um
         # limiar um pouco menor, até ter uma base boa
         few = sims.size < dc.few_samples
         min_score = dc.boot_min if boot else dc.auto_enrich_score - (0.05 if few else 0.0)
         if not dc.auto_enrich or score < min_score or not q.get("learn", True):
             return
-        if ts - self.last_auto.get(member_id, 0.0) < (30 if few else 120):
-            return
+        if boot and not few:
+            return  # consenso de leituras fracas só serve para quem ainda tem poucas amostras
         if sims.size and float(sims.max()) >= 0.80:
             return  # já existe uma amostra quase igual
-        autos = self.con.execute("SELECT id, crop_path FROM samples WHERE member_id=? AND source='auto' "
-                                 "AND status='ok' ORDER BY created_at", (member_id,)).fetchall()
-        # cheio: troca a amostra automática mais antiga (acompanha mudanças de cabelo, barba, óculos)
-        for old in autos[: max(0, len(autos) - dc.auto_enrich_max + 1)]:
+        if not self.hora_de_aprender(member_id, sims.size, ts):
+            return
+        self.guarda_aprendida(member_id, aligned, emb, q["q"], ts,
+                              f"aprendida por consenso de leituras ({score:.2f})" if boot else
+                              f"aprendida automaticamente (similaridade {score:.2f})")
+
+    # ------------------------------------------- aprendizado espalhado no tempo
+    def momentos_do_dia(self, member_id, dt):
+        """Momentos sorteados (minutos desde a meia-noite) em que o membro pode ganhar uma amostra
+        nesse dia: de 1 a enrich_per_day, dentro de enrich_hours, separados por enrich_gap_h.
+        O sorteio depende só do membro e do dia: reiniciar o serviço não muda os momentos."""
+        dc = self.cfg.detection
+        dia = dt.strftime("%Y-%m-%d")
+        cache = self.__dict__.setdefault("_momentos", {})
+        chave = (member_id, dia)
+        if chave not in cache:
+            ini, fim = str(dc.get("enrich_hours", "07:00-23:00")).split("-")
+            a = int(ini.split(":")[0]) * 60 + int(ini.split(":")[1])
+            b = int(fim.split(":")[0]) * 60 + int(fim.split(":")[1])
+            b = b if b > a else 24 * 60
+            gap = float(dc.get("enrich_gap_h", 2.0)) * 60
+            rnd = random.Random(f"willbert:{member_id}:{dia}")
+            n = rnd.randint(1, max(1, int(dc.get("enrich_per_day", 3))))
+            while n > 1 and (n - 1) * gap > b - a:
+                n -= 1
+            folga = (b - a) - (n - 1) * gap
+            pontos = sorted(rnd.uniform(0, folga) for _ in range(n))
+            if len(cache) > 200:
+                cache.clear()
+            cache[chave] = [a + p + i * gap for i, p in enumerate(pontos)]
+        return cache[chave]
+
+    def hora_de_aprender(self, member_id, n_amostras, ts):
+        """Pode guardar uma amostra nova desse membro agora?
+        - fase inicial (menos que few_samples amostras): sim, a cada 30 s, para reconhecer logo;
+        - depois: só depois de um momento sorteado do dia ter chegado, no máximo um por momento
+          (de 1 a enrich_per_day por dia; com a base cheia, enrich_per_day_full), e com pelo menos
+          enrich_gap_h horas desde a última amostra aprendida."""
+        dc = self.cfg.detection
+        if n_amostras < dc.few_samples:
+            return ts - self.last_auto.get(member_id, 0.0) >= 30
+        dt = datetime.fromtimestamp(ts)
+        meia_noite = dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        hoje, ultima = self.con.execute(
+            "SELECT SUM(created_at >= ?), MAX(created_at) FROM samples WHERE member_id=? AND source='auto' "
+            "AND status='ok'", (meia_noite, member_id)).fetchone()
+        hoje = int(hoje or 0)
+        ultima = max(float(ultima or 0.0), self.last_auto.get(member_id, 0.0))
+        if ts - ultima < float(dc.get("enrich_gap_h", 2.0)) * 3600:
+            return False
+        agora = dt.hour * 60 + dt.minute + dt.second / 60
+        abertos = sum(1 for m in self.momentos_do_dia(member_id, dt) if m <= agora)
+        if n_amostras >= dc.enrich_until:
+            abertos = min(abertos, int(dc.get("enrich_per_day_full", 1)))
+        return hoje < abertos
+
+    def guarda_aprendida(self, member_id, aligned, emb, quality, ts, message):
+        """Guarda a amostra aprendida sozinho. Base cheia (enrich_until no total ou auto_enrich_max
+        aprendidas): antes, apaga a mais redundante (mais parecida com as outras) entre a metade mais
+        antiga das aprendidas. As do cadastro (foto, câmera, revisão) nunca são trocadas."""
+        dc = self.cfg.detection
+        total = self.con.execute("SELECT COUNT(*) FROM samples WHERE member_id=? AND status='ok'",
+                                 (member_id,)).fetchone()[0]
+        autos = self.con.execute("SELECT id, crop_path, embedding FROM samples WHERE member_id=? "
+                                 "AND source='auto' AND status='ok' ORDER BY created_at",
+                                 (member_id,)).fetchall()
+        sobra = max(total - int(dc.enrich_until) + 1, len(autos) - int(dc.auto_enrich_max) + 1, 0)
+        if sobra > len(autos):
+            return  # quase tudo é foto do cadastro e já está cheio: nada a trocar
+        for old in self.escolhe_para_trocar(member_id, autos, sobra):
             if old["crop_path"]:
                 try:
                     os.remove(os.path.join(self.data, old["crop_path"]))
                 except FileNotFoundError:
                     pass
             self.con.execute("DELETE FROM samples WHERE id=?", (old["id"],))
-        self.add_sample(member_id, "auto", aligned, emb, q["q"], ts,
-                        f"aprendida por consenso de leituras ({score:.2f})" if boot else
-                        f"aprendida automaticamente (similaridade {score:.2f})")
+            log.info("base de %s cheia: trocou uma amostra antiga e repetida", self.gallery.names.get(member_id))
+        self.add_sample(member_id, "auto", aligned, emb, quality, ts, message)
         self.last_auto[member_id] = ts
+
+    def escolhe_para_trocar(self, member_id, autos, n):
+        """As n amostras aprendidas a sair: entre a metade mais antiga, as mais redundantes."""
+        if n <= 0 or not autos:
+            return []
+        velhas = list(autos[: max(n, (len(autos) + 1) // 2)])
+        todas = self.con.execute("SELECT id, embedding FROM samples WHERE member_id=? AND status='ok' "
+                                 "AND embedding IS NOT NULL", (member_id,)).fetchall()
+        embs = {r["id"]: db.blob_to_emb(r["embedding"]) for r in todas}
+        def redundancia(r):
+            e = embs.get(r["id"])
+            if e is None:
+                return 2.0  # sem embedding: sai primeiro
+            outras = [float(e @ v) for k, v in embs.items() if k != r["id"]]
+            return max(outras, default=0.0)
+        velhas.sort(key=redundancia, reverse=True)  # sort estável: empate mantém a mais antiga primeiro
+        return velhas[:n]
 
     def capture_step(self, matched, ts):
         c, dc = self.capture, self.cfg.detection

@@ -95,6 +95,9 @@ class Assistente:
         self.last_ts, self.last_ms, self.respostas = None, None, 0
         self._lock = threading.Lock()
         self._encerra = False
+        self.so_foto = bool(self.acfg.get("so_foto", True))
+        if self.so_foto:
+            self.REGRAS, self.FRASES, self.NAO_ENTENDI = self.REGRAS_FOTO, self.FRASES_FOTO, self.NAO_ENTENDI_FOTO
         self._fixas = set(self.frases_fixas())
 
     # ------------------------------------------------------------------ entrada
@@ -170,6 +173,12 @@ class Assistente:
         "tudo bem", "bom dia", "boa tarde", "boa noite", "obrigado", "tchau", "repete",
     )
     PARECIDA_MIN = 0.8
+    # Modo "só foto" (assistant.so_foto, padrão desde 2026-11-12, pedido do Victor): a voz só tira a
+    # foto da areia; o resto (cores, brincadeiras, modos) fica no painel web da caixa de areia.
+    REGRAS_FOTO = ("_encerrar", "_areia_rosto")
+    FRASES_FOTO = ("grave o meu rosto", "tira uma foto minha", "me coloca na areia", "tira uma foto",
+                   "foto minha", "tire uma foto", "bate uma foto", "tchau")
+    NAO_ENTENDI_FOTO = "Não entendi. Diga: Willbert, tire uma foto."
 
     def _regras(self, p, fatos):
         for nome in self.REGRAS:
@@ -195,6 +204,8 @@ class Assistente:
     def responder(self, pedido, fatos, so_nome=False, chamado=True):
         quem = fatos.get("pessoa_falando")
         if so_nome:
+            if self.so_foto:
+                return f"Oi, {quem}! Quer que eu tire uma foto?" if quem else "Oi! Quer que eu tire uma foto?"
             return f"Oi, {quem}! Pode falar." if quem else "Oi! Pode falar."
         p = norm(pedido)
         r = self._regras(p, fatos)
@@ -375,7 +386,8 @@ class Assistente:
     def _areia_rosto(self, p, f):
         """'Willbert, grave o meu rosto' -> foto de quem está falando, projetada na caixa de areia."""
         if not re.search(r"\b(grav[ae]|grava|tira|tire|bate|bata|faz|faca|coloca|coloque|poe|ponha|mostra|mostre)\b"
-                         r".*\b(meu rosto|minha cara|minha foto|uma foto|foto minha|na areia)\b", p):
+                         r".*\b(meu rosto|minha cara|minha foto|uma foto|foto minha|na areia)\b", p) \
+                and not re.fullmatch(r"(uma )?foto( minha)?", p):
             return None
         quem = f.get("pessoa_falando")
         acao = self.acoes.get("areia_rosto")
@@ -533,8 +545,11 @@ class Assistente:
 
     def frases_fixas(self):
         """Respostas que não mudam: a voz delas fica em cache (da segunda vez em diante sai na hora)."""
-        textos = list(self.FIXAS) + list(self.PIADAS) + [self._ajuda("ajuda", None)] + list(self.AREIA_FIXAS.values())
-        textos.append(self.NAO_ENTENDI)
+        if self.so_foto:
+            textos = list(self.FIXAS) + [self.NAO_ENTENDI, "Tá bom. Até mais!"]
+        else:
+            textos = list(self.FIXAS) + list(self.PIADAS) + [self._ajuda("ajuda", None)] + list(self.AREIA_FIXAS.values())
+            textos.append(self.NAO_ENTENDI)
         textos += list(self.acfg.get("thinking_phrases") or [])
         return [fala.para_fala(t, int(self.acfg.max_answer_chars)) for t in textos]
 

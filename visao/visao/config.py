@@ -24,7 +24,15 @@ DEFAULTS = {
         "yaw_max": 0.42,           # até aqui o rosto conta como "de frente" (0 = de frente)
         "yaw_side_max": 0.80,      # de lado/perfil até aqui: reconhece, mas pede accept_side
         "accept_side": 0.33,       # similaridade mínima para rosto de lado (sempre com 2 leituras)
-        "enrich_until": 25,        # com tantas amostras o membro está aprendido: para de capturar
+        "enrich_until": 50,        # amostras por membro (cadastro + aprendidas). Cheio: troca, não para
+        # Aprendizado espalhado no tempo (Victor, 2026-11-13): roupa, luz, cabelo e óculos de dias
+        # diferentes valem mais que 25 fotos da mesma tarde. Depois da fase inicial (few_samples),
+        # cada membro ganha no máximo enrich_per_day amostras por dia, em momentos sorteados dentro
+        # de enrich_hours, com pelo menos enrich_gap_h horas entre uma e outra.
+        "enrich_per_day": 3,       # máximo por dia por membro (sorteado de 1 a 3 a cada dia)
+        "enrich_per_day_full": 1,  # com a base cheia: no máximo 1 troca por dia
+        "enrich_gap_h": 2.0,       # intervalo mínimo entre duas amostras do mesmo membro
+        "enrich_hours": "07:00-23:00",  # janela do dia em que os momentos são sorteados
         "boot_readings": 3,        # poucas amostras: N leituras do mesmo rosto concordando identificam
         "boot_min": 0.27,          # ...cada uma com pelo menos essa similaridade
         "boot_mean": 0.30,         # ...e média pelo menos essa
@@ -61,7 +69,7 @@ DEFAULTS = {
                                    # 2026-11-11: o nome só importa no "boa tarde"; 3 = mais cauteloso)
         "auto_enrich_score": 0.45,
         "hard_learn": True,        # aprende o ângulo difícil quando o mesmo rosto é confirmado depois
-        "auto_enrich_max": 30,     # ao encher, a mais antiga é trocada pela nova
+        "auto_enrich_max": 50,     # aprendidas sozinho; cheio: troca a mais redundante entre as mais antigas
         "strong_accept": 0.50,     # acima disso basta uma leitura; abaixo, precisa de duas
     },
     "presence": {
@@ -151,6 +159,8 @@ DEFAULTS = {
         # como o Whisper costuma escrever o nome (comparação aproximada também é feita)
         "wake_words": ["willbert", "wilbert", "uilbert", "wilber", "uilber", "wilbur", "gilbert",
                        "vilbert", "will bert", "uil bert"],
+        "so_foto": True,           # a voz só tira a foto da areia (Victor, 2026-11-12); false = todas as
+                                   # respostas prontas (hora, quem está, cores e brincadeiras da areia)
         "usar_llm": False,         # conversa livre pelo Ollama: só vale num PC com placa de vídeo boa
                                    # (no lab2 ficava 12-25 s e respondia mal; Victor tirou em 2026-11-11)
         "follow_up_s": 10,         # depois de responder, escuta mais N s sem precisar do nome
