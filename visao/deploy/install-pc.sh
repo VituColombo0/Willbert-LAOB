@@ -89,7 +89,7 @@ rsync -a --delete --exclude '__pycache__' "$SRC/visao/" "$BASE/app/visao/"
 install -m 755 "$SRC/deploy/visao-cli" /usr/local/bin/visao-cli
 if [ ! -f "$BASE/config.toml" ]; then
   cp "$SRC/config.example.toml" "$BASE/config.toml"
-  echo "  >> configure a câmera e o site: sudo bash visao/deploy/lab2/configurar.sh"
+  echo "  >> configure a câmera e o site: sudo bash visao/deploy/laob/configurar.sh"
 fi
 chown root:visao "$BASE/config.toml"; chmod 640 "$BASE/config.toml"
 chown -R visao:visao "$BASE/data" "$BASE/models/whisper"; chmod 750 "$BASE/data"

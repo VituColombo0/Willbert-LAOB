@@ -1,6 +1,6 @@
 #!/bin/bash
-# Desinstala o Ollama do lab2 (o Willbert não usa IA desde 2026-11-11; pedido do Victor em 2026-11-13).
-#   sudo bash ~/Willbert/visao/deploy/lab2/remover-ollama.sh
+# Desinstala o Ollama do laob (o Willbert não usa IA desde 2026-11-11; pedido do Victor em 2026-11-13).
+#   sudo bash ~/Willbert/visao/deploy/laob/remover-ollama.sh
 # Para voltar a ter: instalar de novo pelo site oficial e baixar o modelo (não recomendado neste PC).
 set -uo pipefail
 [ "$(id -u)" = 0 ] || { echo "rode com sudo"; exit 1; }

@@ -92,7 +92,7 @@ DEFAULTS = {
         "model": "/opt/visao/models/palm_detection_mediapipe_2023feb.onnx",
         "hold_s": 1.5,             # quanto tempo segurar as mãos
         "pause_s": 20,             # depois de uma foto, espera isso antes de aceitar outro gesto
-        "interval_s": 0.25,        # procura as mãos no máximo 4x por segundo (~50 ms cada, no lab2)
+        "interval_s": 0.25,        # procura as mãos no máximo 4x por segundo (~50 ms cada, no laob)
         "min_face_px": 60,         # rosto mínimo para a foto (px no 720p); menor: pede para chegar perto
         "look_face_px": 40,        # a partir daqui já procura o gesto (para poder avisar quem está longe)
         "phrase": "Pode abaixar as mãos. Foto em três... dois... um... Sorria!",
@@ -161,8 +161,11 @@ DEFAULTS = {
                        "vilbert", "will bert", "uil bert"],
         "so_foto": True,           # a voz só tira a foto da areia (Victor, 2026-11-12); false = todas as
                                    # respostas prontas (hora, quem está, cores e brincadeiras da areia)
+        "avisos": False,           # frases de aviso ("não estou te vendo", "não entendi", "chegue perto",
+                                   # "Oi! Quer que eu tire uma foto?"): desligadas a pedido do Victor (14/11/2026);
+                                   # ele só cumprimenta e faz a contagem da foto
         "usar_llm": False,         # conversa livre pelo Ollama: só vale num PC com placa de vídeo boa
-                                   # (no lab2 ficava 12-25 s e respondia mal; Victor tirou em 2026-11-11)
+                                   # (no laob ficava 12-25 s e respondia mal; Victor tirou em 2026-11-11)
         "follow_up_s": 10,         # depois de responder, escuta mais N s sem precisar do nome
         "audio_url": "rtsp://127.0.0.1:8554/camera",  # áudio da câmera pelo go2rtc
         "vad_aggressiveness": 2,   # 0-3: quanto maior, mais rigoroso para considerar "fala"

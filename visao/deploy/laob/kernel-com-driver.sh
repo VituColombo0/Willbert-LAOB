@@ -1,5 +1,5 @@
 #!/bin/bash
-# Faz o lab2 iniciar no kernel mais novo que TEM o driver NVIDIA instalado.
+# Faz o laob iniciar no kernel mais novo que TEM o driver NVIDIA instalado.
 #   sudo bash kernel-com-driver.sh            escolhe e grava (/etc/default/grub.d/99-willbert-kernel.cfg)
 #   sudo bash kernel-com-driver.sh --desfazer volta ao padrão do Ubuntu (o kernel mais novo)
 # Por quê: em 2026-11-11 as atualizações automáticas instalaram o kernel 6.8, mas o driver NVIDIA

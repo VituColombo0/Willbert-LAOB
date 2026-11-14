@@ -499,7 +499,9 @@ class Detector:
             time.sleep(0.6)   # a pessoa pode estar virando: tenta mais uma vez
             frame = self.src.latest()[0] if self.src.latest()[0] is not None else frame
         if img is None:
-            self.speaker.speak_now("Não vi seu rosto direito. Faça o gesto de novo, olhando para a câmera.")
+            log.info("foto para a areia: sem rosto de frente; não mandei nada")
+            if self.cfg.assistant.get("avisos", False):
+                self.speaker.speak_now("Não vi seu rosto direito. Faça o gesto de novo, olhando para a câmera.")
             return
         log.info("foto para a areia: %dx%d, %s, %s (%.1f s)", img.shape[1], img.shape[0], fonte,
                  "fundo recortado" if alfa is not None else "com fundo", time.time() - t1)
@@ -626,7 +628,8 @@ class Detector:
         if self.gesto.leitura(quem is not None, now):
             if quem.face.w < float(gc.get("min_face_px", 60)):
                 log.info("gesto de longe (rosto de %.0f px): pedindo para chegar perto", quem.face.w)
-                self.speaker.speak_fixed("Chegue um pouco mais perto da câmera e faça o gesto de novo.")
+                if self.cfg.assistant.get("avisos", False):
+                    self.speaker.speak_fixed("Chegue um pouco mais perto da câmera e faça o gesto de novo.")
                 self.gesto.disparou = now - float(gc.get("pause_s", 20)) + 4   # pode tentar de novo logo
                 return
             nome = self.gallery.names.get(quem.member_id) if quem.member_id is not None else None

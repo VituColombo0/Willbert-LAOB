@@ -1,5 +1,5 @@
 #!/bin/bash
-# Liga/desliga o Willbert no lab2 sem pedir senha (sudoers libera SÓ este arquivo).
+# Liga/desliga o Willbert no laob sem pedir senha (sudoers libera SÓ este arquivo).
 # Instalado como root em /usr/local/sbin/willbert-controle pelo otimizar.sh.
 #   sudo willbert-controle ligar | desligar | estado | testar-camera | importar | foto
 set -euo pipefail

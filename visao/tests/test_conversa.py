@@ -50,7 +50,8 @@ def fatos():
 
 
 cfg = load("/nonexistent.toml", detect_hardware=False)
-cfg.assistant["so_foto"] = False  # modo completo; o modo "só foto" (padrão no lab2) tem testes no fim
+cfg.assistant["avisos"] = True   # estes testes conferem também as frases de aviso
+cfg.assistant["so_foto"] = False  # modo completo; o modo "só foto" (padrão no laob) tem testes no fim
 cfg.llm["model"] = ""  # sem LLM nos testes de respostas prontas
 sp = FakeSpeaker()
 a = Assistente(cfg, sp, fatos, LLM(cfg.llm))
@@ -231,6 +232,7 @@ check("RTX 3060 12 GB -> gpu-forte", hardware.choose(dict(h, gpus=[("RTX 3060", 
 check("GTX 1660 6 GB -> gpu", hardware.choose(dict(h, gpus=[("GTX 1660", 6)], vram_gb=6)) == "gpu")
 check("TV Box -> tvbox", hardware.choose(dict(h, arch="armv7l", ram_gb=1)) == "tvbox")
 tv = load("/nonexistent.toml", detect_hardware=False); tv.assistant["so_foto"] = False
+tv.assistant["avisos"] = True   # estes testes conferem também as frases de aviso
 check("sem perfil, padrões continuam os da TV Box", tv.detection.det_width == 576 and not tv.assistant.enabled)
 
 # --- texto falado
@@ -246,6 +248,7 @@ class LLMLento:
     enabled = True
     def chat(self, *a, **k): time.sleep(0.5); return "Brasília é a capital."
 cfg_l = load("/nonexistent.toml", detect_hardware=False); cfg_l.assistant["thinking_s"] = 0.2
+cfg_l.assistant["avisos"] = True   # estes testes conferem também as frases de aviso
 cfg_l.assistant["so_foto"] = False
 sp_a = SpAviso()
 al = Assistente(cfg_l, sp_a, lambda: {"agora": datetime.now(), "membros": [], "na_camera": [], "pessoa_falando": None,
@@ -358,7 +361,7 @@ class CanoQuebrado(_io.RawIOBase):
 c = CanoQuebrado(bytes(range(50)))
 check("áudio em pedaços quebrados é juntado", le_exato(c, 20) == bytes(range(20)) and le_exato(c, 30) == bytes(range(20, 50)))
 check("fim de verdade do áudio é percebido", le_exato(c, 10) is None)
-# --- sem LLM: só comandos fixos, tolerantes a erro de escuta (casos reais do lab2, 2026-11-11)
+# --- sem LLM: só comandos fixos, tolerantes a erro de escuta (casos reais do laob, 2026-11-11)
 from visao.assistente import falacao
 fotos_sem = []
 sem = Assistente(cfg, sp, fatos, None, acoes={"areia_rosto": lambda n: fotos_sem.append(n) or True,
@@ -412,7 +415,7 @@ for _ in range(9):
 check("1 foto (+9 aprendidas sozinho): não aprende mais", not _d.pode_aprender(1))
 _amostra("camera"); _amostra("foto")
 check("3 fotos cadastradas: volta a aprender", _d.pode_aprender(1))
-# --- gesto: mãos abertas ao lado do rosto tiram a foto da areia (casos medidos no lab2)
+# --- gesto: mãos abertas ao lado do rosto tiram a foto da areia (casos medidos no laob)
 from visao.gesto import Gesto, ancoras, maos_ao_lado
 from visao.faces import Face
 check("detector de palmas: 2016 âncoras", ancoras().shape == (2016, 2))
@@ -436,6 +439,7 @@ check("mão abaixada por mais tempo zera", g3.leitura(True, 2.1) is False and g3
 # detector: o gesto chama a foto da areia e fala a contagem
 _g = _det.Detector.__new__(_det.Detector)
 _g.cfg = load("/nonexistent.toml", detect_hardware=False)
+_g.cfg.assistant["avisos"] = True   # estes testes conferem também as frases de aviso
 _g.gesto, _g.last_palm = Gesto(segurar_s=1.0, pausa_s=20), 0.0
 _g.palmas = type("P", (), {"detecta": lambda self, f: [pal(730, 580), pal(1340, 600)]})()
 from visao.tracker import Track
@@ -482,6 +486,7 @@ if _sh.which("ffmpeg"):
     _sh.rmtree(_dir)
 # --- modo "só foto" (padrão desde 2026-11-12): a voz só tira a foto; o resto é pelo painel
 cfg_f = load("/nonexistent.toml", detect_hardware=False); cfg_f.llm["model"] = ""
+cfg_f.assistant["avisos"] = True   # estes testes conferem também as frases de aviso
 check("padrão: modo só foto ligado", cfg_f.assistant.so_foto is True)
 fotos_f = []
 af = Assistente(cfg_f, FakeSpeaker(), fatos, None, acoes={"areia_rosto": lambda n: fotos_f.append(n) or True})
@@ -493,4 +498,16 @@ r = af.responder(norm("que horas são"), fatos())
 check("só foto: outros pedidos ensinam o comando", r == "Não entendi. Diga: Willbert, tire uma foto.", repr(r))
 check("só foto: só o nome oferece a foto", af.responder("", fatos(), so_nome=True) == "Oi, Victor! Quer que eu tire uma foto?")
 check("só foto: frases fixas pequenas (cache de voz)", len(af.frases_fixas()) < len(a.frases_fixas()))
+# --- padrão do laob (14/11/2026): sem frases de aviso, só cumprimentos e a contagem da foto
+cfg_q = load("/nonexistent.toml", detect_hardware=False)
+check("avisos desligados por padrão", cfg_q.assistant.get("avisos") is False)
+fotos_q = []
+f_ninguem = dict(fatos(), na_camera=[], pessoa_falando=None, rostos=0)
+q = Assistente(cfg_q, sp, lambda: f_ninguem, None, acoes={"areia_rosto": lambda n: fotos_q.append(n) or True})
+for frase in ("Willbert", "Willbert, tire uma foto", "Willbert, qual a capital da França?"):
+    q.follow_until = 0
+    check(f"sem avisos: {frase!r} -> silêncio", q.ouviu(frase) is None and not fotos_q)
+q2 = Assistente(cfg_q, sp, fatos, None, acoes={"areia_rosto": lambda n: fotos_q.append(n) or True})
+q2.follow_until = 0
+check("com alguém na câmera, a foto continua funcionando", (q2.ouviu("Willbert, tire uma foto") or "").startswith("Sorria"))
 print("TUDO OK" if ok else "HÁ FALHAS")

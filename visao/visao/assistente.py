@@ -5,7 +5,7 @@ perguntas comuns têm resposta pronta e exata (hora, data, quem está, quem cheg
 fulano veio, comandos da caixa de areia) -> fala.para_fala() deixa a resposta curta e falável
 -> alto-falante da câmera.
 
-No lab2 (2026-11-11) o LLM foi desligado a pedido do Victor: num PC sem placa boa ele levava
+No laob (2026-11-11) o LLM foi desligado a pedido do Victor: num PC sem placa boa ele levava
 12-25 s e respondia mal quando o Whisper ouvia errado ("grado o meu gosto"). Agora só há
 comandos fixos; uma frase que não casa com nenhum é comparada com as frases conhecidas e vale
 a mais parecida (o Whisper erra letras, não a frase toda). Ainda dá para ligar um LLM
@@ -203,7 +203,10 @@ class Assistente:
 
     def responder(self, pedido, fatos, so_nome=False, chamado=True):
         quem = fatos.get("pessoa_falando")
+        avisos = bool(self.acfg.get("avisos", False))
         if so_nome:
+            if not avisos:
+                return None  # só o nome ("Willbert"): fica quieto (era "Oi! Quer que eu tire uma foto?")
             if self.so_foto:
                 return f"Oi, {quem}! Quer que eu tire uma foto?" if quem else "Oi! Quer que eu tire uma foto?"
             return f"Oi, {quem}! Pode falar." if quem else "Oi! Pode falar."
@@ -235,7 +238,7 @@ class Assistente:
                 return r
             return "Desculpe, não consegui pensar numa resposta agora. Pode perguntar de novo?"
         # sem LLM: chamado pelo nome, explica o que dá para pedir; continuação solta, silêncio
-        return self.NAO_ENTENDI if chamado else None
+        return self.NAO_ENTENDI if chamado and avisos else None
 
     # --- conversa
     def _encerrar(self, p, f):
@@ -394,6 +397,9 @@ class Assistente:
         if acao is None:
             return "A caixa de areia não está ligada a mim agora."
         if not f.get("na_camera") and not f.get("rostos"):  # vale para quem ainda não é cadastrado
+            if not self.acfg.get("avisos", False):
+                log.info("pediram foto, mas não há rosto na câmera: fica quieto")
+                return None
             return "Não estou te vendo. Fica de frente para a câmera e pede de novo."
         if not acao(quem):
             return "Não consegui mandar para a areia agora. Tenta de novo daqui a pouco."

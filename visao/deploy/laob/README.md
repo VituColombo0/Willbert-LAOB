@@ -1,6 +1,6 @@
-# Willbert no lab2
+# Willbert no laob
 
-O lab2 (i5-3330, 4 núcleos sem AVX2, GTX 750 Ti) divide a máquina com a caixa de areia
+O laob (i5-3330, 4 núcleos sem AVX2, GTX 750 Ti) divide a máquina com a caixa de areia
 (SARndbox + projetor, repositório [Projetor-LAOB](https://github.com/VituColombo0/Projetor-LAOB)).
 Por isso o Willbert não liga sozinho: só quando pedido.
 

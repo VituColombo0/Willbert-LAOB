@@ -1,6 +1,6 @@
 #!/bin/bash
-# Atualiza no lab2 o Willbert já instalado com a cópia de ~/Willbert (repositório). Rodar com sudo:
-#   sudo bash ~/Willbert/visao/deploy/lab2/atualizar-app.sh
+# Atualiza no laob o Willbert já instalado com a cópia de ~/Willbert (repositório). Rodar com sudo:
+#   sudo bash ~/Willbert/visao/deploy/laob/atualizar-app.sh
 # Copia o app, os modelos que faltarem, o willbert-controle e os atalhos do usuário; reinicia o detector.
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "rode com sudo"; exit 1; }
@@ -20,8 +20,8 @@ if [ -f "$C" ] && grep -qE '^[[:space:]]*(enrich_until|auto_enrich_max)[[:space:
   sed -i -E 's/^([[:space:]]*)(enrich_until|auto_enrich_max)([[:space:]]*=.*)$/\1# \2\3   # antigo: o padrão agora é 50/' "$C"
   echo "config: limite antigo de amostras desativado (cópia em $C.antes-50)"
 fi
-install -o root -g root -m 755 "$R/deploy/lab2/willbert-controle" /usr/local/sbin/willbert-controle
-for c in willbert willbert-janela; do install -o "$U" -g "$U" -m 755 "$R/deploy/lab2/$c" "$UH/.local/bin/$c"; done
+install -o root -g root -m 755 "$R/deploy/laob/willbert-controle" /usr/local/sbin/willbert-controle
+for c in willbert willbert-janela; do install -o "$U" -g "$U" -m 755 "$R/deploy/laob/$c" "$UH/.local/bin/$c"; done
 # (a pasta "6 - Willbert" da Área de Trabalho saiu em 13/11: o Willbert é ligado pelo painel da areia)
 if systemctl is-active -q visao-detector; then systemctl restart visao-detector; fi
 echo INSTALADO-OK

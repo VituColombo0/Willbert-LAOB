@@ -19,8 +19,8 @@ da câmera e conversa com a caixa de areia do
 [Projetor-LAOB](https://github.com/VituColombo0/Projetor-LAOB). Tudo é local: sem nuvem.
 
 > [!NOTE]
-> **No lab2 (desde nov/2026) ele funciona sem IA e sem microfone:** só frases prontas (cumprimentos
-> e a contagem da foto) e a foto da areia por gesto. O Ollama foi removido do lab2
+> **No laob (desde nov/2026) ele funciona sem IA e sem microfone:** só frases prontas (cumprimentos
+> e a contagem da foto) e a foto da areia por gesto. O Ollama foi removido do laob
 > (`remover-ollama.sh`). Conversa por voz e LLM continuam no código para PCs mais fortes.
 
 ## Funcionalidades
@@ -70,7 +70,7 @@ faster-whisper atual não roda nelas.
 - Câmera TP-Link Tapo C200 com **"Compatibilidade com terceiros"** ligada no app (para o áudio).
 - Python 3.10+, FFmpeg (4.x ou 5.1+) e acesso `sudo` para a instalação.
 
-**Desempenho medido no lab2** (junto com o SARndbox):
+**Desempenho medido no laob** (junto com o SARndbox):
 
 | Etapa | Tempo |
 |---|---|
@@ -97,7 +97,7 @@ faster-whisper atual não roda nelas.
 3. Configure câmera, conta Tapo e senha do site (as senhas são digitadas escondidas):
 
    ```bash
-   sudo bash visao/deploy/lab2/configurar.sh
+   sudo bash visao/deploy/laob/configurar.sh
    ```
 
 4. Cadastre os membros pelo site (`http://<IP-DO-PC>:8080`), com fotos ou pela câmera.
@@ -108,7 +108,7 @@ faster-whisper atual não roda nelas.
 
 ## Uso
 
-**No lab2** o Willbert fica desligado e só liga quando pedido:
+**No laob** o Willbert fica desligado e só liga quando pedido:
 
 ```bash
 willbert ligar
@@ -122,10 +122,10 @@ willbert ligar
 | `visao-cli hardware` | Mostra o perfil escolhido |
 | `visao-cli conversar --mudo` | Conversa digitando (sem câmera) |
 
-No lab2, ligar e desligar também ficam no painel da caixa de areia (Projetor-LAOB, porta 8090);
+No laob, ligar e desligar também ficam no painel da caixa de areia (Projetor-LAOB, porta 8090);
 a antiga pasta "6 - Willbert" da Área de Trabalho saiu em 13/11/2026.
 
-**Scripts do lab2** (`visao/deploy/lab2/`, detalhes no [README da pasta](visao/deploy/lab2/README.md)):
+**Scripts do laob** (`visao/deploy/laob/`, detalhes no [README da pasta](visao/deploy/laob/README.md)):
 
 | Script | Para quê |
 |---|---|
@@ -140,7 +140,7 @@ a antiga pasta "6 - Willbert" da Área de Trabalho saiu em 13/11/2026.
 
 Arquivo `/opt/visao/config.toml` (modelo em [visao/config.example.toml](visao/config.example.toml)):
 
-| Opção | Valor no lab2 | Descrição |
+| Opção | Valor no laob | Descrição |
 | :--- | :--- | :--- |
 | `[hardware] profile` | `auto` (detecta `cpu-basico`) | Força outro perfil |
 | `[assistant] usar_llm` | `false` | Usa ou não o LLM |
@@ -180,7 +180,7 @@ Willbert-LAOB/
     │   ├── hardware.py · config.py · cli.py                  # perfis, config, visao-cli
     │   └── web.py · templates/ · static/                     # site :8080
     ├── deploy/                  # install-pc.sh, serviços systemd, visao-cli
-    │   └── lab2/                # scripts e atalhos do PC do laboratório
+    │   └── laob/                # scripts e atalhos do PC do laboratório
     └── tests/                   # testes sem câmera
 ```
 

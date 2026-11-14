@@ -1,5 +1,5 @@
 #!/bin/bash
-# Desfaz o otimizar.sh do lab2.
+# Desfaz o otimizar.sh do laob.
 set -uo pipefail
 [ "$(id -u)" = 0 ] || { echo "rode com sudo"; exit 1; }
 EST=/etc/willbert-otimizacao

@@ -173,7 +173,7 @@ def miolo_do_corpo(shape, rosto):
 
 
 def mascara_unet(img, modelo):
-    """0..1 onde parece gente (U²-Net de pessoas, ~2-3 s na CPU do lab2)."""
+    """0..1 onde parece gente (U²-Net de pessoas, ~2-3 s na CPU do laob)."""
     net = cv2.dnn.readNetFromONNX(modelo)
     rgb = cv2.cvtColor(cv2.resize(img, (320, 320), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
     rgb = rgb.astype(np.float32) / max(float(rgb.max()), 1.0)

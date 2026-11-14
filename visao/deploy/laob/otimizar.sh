@@ -1,5 +1,5 @@
 #!/bin/bash
-# Otimiza o lab2 para o SARndbox (projetor) + Willbert. Tudo reversível: sudo bash desfazer.sh
+# Otimiza o laob para o SARndbox (projetor) + Willbert. Tudo reversível: sudo bash desfazer.sh
 #   sudo bash otimizar.sh
 # Não mexe no driver de vídeo, não remove pacotes, não toca na interface gráfica.
 set -euo pipefail
@@ -38,7 +38,7 @@ UNIT
 cp /etc/systemd/system/visao-detector.service.d/prioridade.conf /etc/systemd/system/visao-web.service.d/prioridade.conf
 printf '[Service]\nNice=5\nCPUWeight=60\n' > /etc/systemd/system/visao-go2rtc.service.d/prioridade.conf
 
-echo "[3/8] Ollama só na CPU e desligado (só se ainda estiver instalado; no lab2 saiu em 2026-11-13)"
+echo "[3/8] Ollama só na CPU e desligado (só se ainda estiver instalado; no laob saiu em 2026-11-13)"
 if systemctl cat ollama >/dev/null 2>&1; then
 mkdir -p /etc/systemd/system/ollama.service.d
 cat > /etc/systemd/system/ollama.service.d/willbert.conf <<UNIT

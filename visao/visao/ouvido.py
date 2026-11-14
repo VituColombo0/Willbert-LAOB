@@ -24,7 +24,7 @@ log = logging.getLogger("visao.ouvido")
 
 def le_exato(arquivo, n):
     """Lê exatamente n bytes de um cano. Um cano sem buffer pode entregar menos que o pedido
-    sem ter acabado (no lab2 o áudio chega em pedaços quebrados): junta até completar.
+    sem ter acabado (no laob o áudio chega em pedaços quebrados): junta até completar.
     None só quando o ffmpeg fechou de verdade."""
     partes, falta = [], n
     while falta > 0:

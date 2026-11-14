@@ -1,6 +1,6 @@
 #!/bin/bash
-# Configura o Willbert do zero no lab2 (sem o mini servidor): câmera, conta Tapo e senha do site.
-#   sudo bash ~/Willbert/visao/deploy/lab2/configurar.sh
+# Configura o Willbert do zero no laob (sem o mini servidor): câmera, conta Tapo e senha do site.
+#   sudo bash ~/Willbert/visao/deploy/laob/configurar.sh
 # As senhas são digitadas escondidas, vão só para /opt/visao/config.toml (root:visao 640) e
 # para o login do site; nada é mostrado na tela nem fica no histórico. Pode rodar de novo.
 # Não liga o Willbert (só: sudo -n willbert-controle ligar).
@@ -36,7 +36,7 @@ echo "2) Conta TP-Link/Tapo (a do login no app). Serve para o Willbert falar e o
 echo "   Precisa de 'Compatibilidade com terceiros' ligada no app. Enter = manter a que já está."
 TAPO_PASS=$(pede_senha "   senha da conta Tapo" opcional)
 echo
-echo "3) Site do Willbert (http://<lab2>:8080), onde se cadastram os membros"
+echo "3) Site do Willbert (http://<laob>:8080), onde se cadastram os membros"
 WEB_PASS=""
 read -rp "   trocar o usuário/senha do site? [s/N]: " TROCA_SITE
 if [ "${TROCA_SITE,,}" = s ]; then

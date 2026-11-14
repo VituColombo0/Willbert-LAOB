@@ -1,5 +1,5 @@
 #!/bin/bash
-# Comandos do Willbert para o usuário do lab2 (sem sudo): "willbert" e "willbert-janela".
+# Comandos do Willbert para o usuário do laob (sem sudo): "willbert" e "willbert-janela".
 #   bash instalar-atalhos.sh
 # Desde 13/11/2026 o Willbert é ligado/desligado pelo painel da caixa de areia (http://localhost:8090);
 # a pasta "6 - Willbert" da Área de Trabalho saiu (este script a remove se ainda existir).

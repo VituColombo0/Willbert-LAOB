@@ -39,7 +39,7 @@ def opcoes_rtsp_timeout(microssegundos=10000000, versao=None):
 
 def opcoes_quadros_sem_repetir(versao=None):
     """Não duplicar nem inventar quadros: "-fps_mode passthrough" só existe do 5.1 em diante
-    (o Ubuntu 22.04 do lab2 tem o 4.4, onde é "-vsync 0")."""
+    (o Ubuntu 22.04 do laob tem o 4.4, onde é "-vsync 0")."""
     v = versao or ffmpeg_versao()
     return ["-fps_mode", "passthrough"] if v >= (5, 1) else ["-vsync", "0"]
 
