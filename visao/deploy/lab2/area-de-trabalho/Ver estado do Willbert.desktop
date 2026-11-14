@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Ver estado do Willbert
-Comment=Mostra se o Willbert está ligado
-Exec=/home/laob/.local/bin/willbert-janela estado
-Icon=dialog-information
-Terminal=false

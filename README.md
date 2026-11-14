@@ -122,8 +122,8 @@ willbert ligar
 | `visao-cli hardware` | Mostra o perfil escolhido |
 | `visao-cli conversar --mudo` | Conversa digitando (sem câmera) |
 
-Na Área de Trabalho do lab2, a pasta **"6 - Willbert"** tem atalhos de dois cliques (ligar,
-desligar, ver estado, abrir o site) e um `COMO USAR.txt`.
+No lab2, ligar e desligar também ficam no painel da caixa de areia (Projetor-LAOB, porta 8090);
+a antiga pasta "6 - Willbert" da Área de Trabalho saiu em 13/11/2026.
 
 **Scripts do lab2** (`visao/deploy/lab2/`, detalhes no [README da pasta](visao/deploy/lab2/README.md)):
 
@@ -134,7 +134,7 @@ desligar, ver estado, abrir o site) e um `COMO USAR.txt`.
 | `otimizar.sh` / `desfazer.sh` | Desempenho do PC para SARndbox + Willbert (reversível) |
 | `kernel-com-driver.sh` | Fixa o GRUB num kernel que tem o driver NVIDIA |
 | `remover-ollama.sh` | Remove o Ollama |
-| `instalar-atalhos.sh` | Atalhos da Área de Trabalho |
+| `instalar-atalhos.sh` | Comandos `willbert` e `willbert-janela` (e remove a antiga pasta 6) |
 
 ## Configuração
 

@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Ligar Willbert
-Comment=Liga o Willbert (leva uns 30 segundos)
-Exec=/home/laob/.local/bin/willbert-janela ligar
-Icon=system-run
-Terminal=false

@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Abrir site do Willbert
-Comment=Cadastro de membros e histórico (http://localhost:8080)
-Exec=xdg-open http://localhost:8080
-Icon=web-browser
-Terminal=false

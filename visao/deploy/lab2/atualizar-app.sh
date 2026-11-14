@@ -22,7 +22,6 @@ if [ -f "$C" ] && grep -qE '^[[:space:]]*(enrich_until|auto_enrich_max)[[:space:
 fi
 install -o root -g root -m 755 "$R/deploy/lab2/willbert-controle" /usr/local/sbin/willbert-controle
 for c in willbert willbert-janela; do install -o "$U" -g "$U" -m 755 "$R/deploy/lab2/$c" "$UH/.local/bin/$c"; done
-D=$(sudo -u "$U" xdg-user-dir DESKTOP 2>/dev/null || echo "$UH/Desktop")
-[ -d "$D/6 - Willbert" ] && install -o "$U" -g "$U" -m 644 "$R/deploy/lab2/area-de-trabalho/6-willbert.txt" "$D/6 - Willbert/COMO USAR.txt"
+# (a pasta "6 - Willbert" da Área de Trabalho saiu em 13/11: o Willbert é ligado pelo painel da areia)
 if systemctl is-active -q visao-detector; then systemctl restart visao-detector; fi
 echo INSTALADO-OK
