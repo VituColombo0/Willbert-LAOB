@@ -163,6 +163,10 @@ python -m tests.sim_multi
 python -m tests.test_foto
 ```
 
+```bash
+python -m tests.test_manutencao
+```
+
 Testam respostas prontas, LLM simulado, perfis e fala; várias pessoas, cumprimentos por período e
 aprendizado; e o tratamento da foto do gesto. Passam quando terminam com `TUDO OK`.
 
