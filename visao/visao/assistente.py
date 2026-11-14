@@ -308,12 +308,8 @@ class Assistente:
     JOGOS_AREIA = (
         (r"\bcorrida\b", "corrida", "Corrida de rios! Cada time leva a água da sua nascente até a sua bandeira."),
         (r"\b(salv\w+ a vila|jogo da vila|enchente)\b", "vila", "Salvem a vila! Levantem diques antes da chuva chegar."),
-        (r"\b(fazenda|irrig\w+|plantac\w+)\b", "fazenda", "Irriguem a fazenda! Levem água às plantações antes que sequem."),
         (r"\b(rota|portoes|paradas)\b", "rota", "Rota com paradas! A água tem que passar pelos portões na ordem."),
-        (r"\b(ench\w+ o lago|lago na medida|jogo do lago)\b", "lago", "Encham o lago na medida! A água é pouca: acertem a faixa verde."),
         (r"\b(erupcao|lava|jogo do vulcao)\b", "vulcao", "Vulcão em erupção! Protejam as casas da lava com muralhas."),
-        (r"\b(barcos?|barquinho)\b", "barco", "Barquinho na água! Cavem um rio até o porto."),
-        (r"\b(resgat\w+|salv\w+ os peix\w+)\b", "resgate", "Resgate dos peixes! Levem a água até as poças antes que sequem."),
     )
 
     def _areia_comando(self, p, f):
@@ -321,8 +317,8 @@ class Assistente:
         acao = self.acoes.get("areia")
         assunto = re.search(r"\b(tesouros?|bau|peixes?|peixinhos?|carros?|carrinhos?|animais|bichos|labirinto|"
                             r"fosseis|fossil|dinossauros?|escavacao|t rex|trex|triceratops|pterodactilo|ptero|tiranossauro|pegada|"
-                            r"topografia|brincadeiras?|tema|cores?|jogos?|corrida|vila|enchente|fazenda|plantac\w+|"
-                            r"rota|portoes|paradas|lago|erupcao|lava|barcos?|barquinho|resgate|resgatar|rodada|partida|"
+                            r"topografia|brincadeiras?|tema|cores?|jogos?|corrida|vila|enchente|"
+                            r"rota|portoes|paradas|erupcao|lava|rodada|partida|"
                             r"vulcao|inverno|neve|marte|deserto|oceano|arco ?iris|areia)\b", p)
         if not assunto:
             return None
@@ -360,8 +356,7 @@ class Assistente:
                                                  re.search(r"\b(areia|normal|relevo)\b", p)):
             return self._areia_manda(acao, "/modo", {"modo": "original"}, "topografia")
         if parar and re.search(r"\b(brincadeiras?|tesouros?|bau|peixes?|carros?|carrinhos?|animais|bichos|"
-                               r"labirinto|fosseis|fossil|dinossauros?|escavacao|jogos?|corrida|barcos?|barquinho|"
-                               r"resgate|lava|erupcao)\b", p):
+                               r"labirinto|fosseis|fossil|dinossauros?|escavacao|jogos?|corrida|lava|erupcao)\b", p):
             return self._areia_manda(acao, "/brincar", {"acao": "parar"}, "parar")
         # jogos de água (antes dos temas: "vulcão em erupção" é o jogo; "tema vulcão" são as cores)
         for padrao, jogo, frase in self.JOGOS_AREIA:
