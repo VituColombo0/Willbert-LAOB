@@ -27,7 +27,7 @@ systemctl enable --now cpu-desempenho.service >/dev/null
 echo "  governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor)"
 
 echo "[2/8] SARndbox primeiro: Willbert e LLM com prioridade menor"
-for u in visao-detector visao-web visao-go2rtc ollama; do mkdir -p /etc/systemd/system/$u.service.d; done
+for u in visao-detector visao-web visao-go2rtc; do mkdir -p /etc/systemd/system/$u.service.d; done
 cat > /etc/systemd/system/visao-detector.service.d/prioridade.conf <<UNIT
 # willbert-otimizacao: o projetor (SARndbox) nunca deve engasgar por causa do Willbert
 [Service]
@@ -38,7 +38,9 @@ UNIT
 cp /etc/systemd/system/visao-detector.service.d/prioridade.conf /etc/systemd/system/visao-web.service.d/prioridade.conf
 printf '[Service]\nNice=5\nCPUWeight=60\n' > /etc/systemd/system/visao-go2rtc.service.d/prioridade.conf
 
-echo "[3/8] Ollama só na CPU (a placa de vídeo é do SARndbox) e só liga com o Willbert"
+echo "[3/8] Ollama só na CPU e desligado (só se ainda estiver instalado; no lab2 saiu em 2026-11-13)"
+if systemctl cat ollama >/dev/null 2>&1; then
+mkdir -p /etc/systemd/system/ollama.service.d
 cat > /etc/systemd/system/ollama.service.d/willbert.conf <<UNIT
 # willbert-otimizacao
 [Service]
@@ -53,6 +55,7 @@ UNIT
 { systemctl is-enabled ollama 2>/dev/null || true; } | antes ollama.antes || true
 systemctl daemon-reload
 systemctl disable --now ollama >/dev/null 2>&1 || true
+fi
 
 echo "[4/8] serviços que este PC não usa (impressora, modem, relatórios de erro, descoberta na rede)"
 # avahi: anúncio na rede local (o acesso é pelo Tailscale); kerneloops/apport: relatórios de erro;

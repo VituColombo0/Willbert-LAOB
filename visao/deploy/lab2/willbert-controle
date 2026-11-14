@@ -19,17 +19,16 @@ PY
 
 case "${1:-}" in
   ligar)
-    # sem LLM desde 2026-11-11 (só comandos fixos): o Ollama fica desligado e libera ~2 GB
-    systemctl stop ollama 2>/dev/null || true
+    # sem LLM desde 2026-11-11; Ollama desinstalado em 2026-11-13 (remover-ollama.sh)
     systemctl start visao-go2rtc visao-detector visao-web
     { systemctl is-active visao-go2rtc visao-detector visao-web || true; } | paste -sd' ' ;;
   desligar)
-    systemctl stop visao-detector visao-go2rtc ollama
+    systemctl stop visao-detector visao-go2rtc
     # "inactive" aqui é o esperado; o is-active sai com código 3 e o pipefail fazia o desligar
     # parecer falha (o atalho mostrava erro mesmo desligando)
-    { systemctl is-active ollama visao-go2rtc visao-detector || true; } | paste -sd' ' ;;
+    { systemctl is-active visao-go2rtc visao-detector || true; } | paste -sd' ' ;;
   estado)
-    for u in ollama visao-go2rtc visao-detector visao-web; do printf '%s=%s ' "$u" "$(systemctl is-active $u)"; done; echo
+    for u in visao-go2rtc visao-detector visao-web; do printf '%s=%s ' "$u" "$(systemctl is-active $u)"; done; echo
     journalctl -u visao-detector -n 15 --no-pager -o cat 2>/dev/null | grep -viE 'senha|password' || true ;;
   testar-camera)
     VISAO_CONFIG=$B/config.toml visao-cli testar-camera ;;
