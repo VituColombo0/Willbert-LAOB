@@ -37,6 +37,7 @@ from .notify import Notifier
 from .presence import Presence
 from .speaker import Speaker
 from .tracker import Tracker
+from .vigia_go2rtc import VigiaGo2rtc
 
 log = logging.getLogger("visao.detector")
 
@@ -78,6 +79,21 @@ def annotate(frame, items):
     return img
 
 
+
+def partida_do_video(pacotes):
+    """(início, fim, quadro-chave de onde decodificar) de um pedaço do gravador, dados os pacotes
+    (tempo, é quadro-chave). O pedaço mais novo ainda está sendo escrito: se o último quadro-chave
+    está no finzinho do arquivo ele pode estar pela metade e o ffmpeg não decodifica nada a partir
+    dele (em 14/11/2026 isso fazia o quadro em 1080p falhar em 40% das vezes e a rajada da foto
+    vir vazia). Nesse caso parte do quadro-chave anterior."""
+    inicio = min(t for t, _ in pacotes)
+    fim = max(t for t, _ in pacotes)
+    chaves = [t for t, k in pacotes if k]
+    seguras = [t for t in chaves if fim - t >= 0.25]
+    chave = max(seguras) if seguras else (min(chaves) if chaves else inicio)
+    return inicio, fim, chave
+
+
 class Detector:
     assistente = ouvido = None  # conversa (só quando ligada)
 
@@ -113,6 +129,8 @@ class Detector:
         # frases ficam no disco: a voz natural (Piper) é lenta para gerar e não deve se perder
         self.speaker = Speaker(cfg.greeting, os.path.join(self.data, "tts"))
         self.speaker.start()
+        self.vigia_go2rtc = VigiaGo2rtc(cfg.greeting.get("go2rtc_url") or "http://127.0.0.1:1984")
+        self.ultimo_rosto = 0.0   # quando viu um rosto pela última vez (o ouvido só escuta com gente perto)
         # conversa pela câmera (PC): ouvido -> assistente -> LLM/respostas prontas -> voz
         self.assistente = self.ouvido = None
         self.gesto = self.palmas = None
@@ -166,7 +184,12 @@ class Detector:
         llm = LLM(cfg.llm, cfg.assistant.name) if cfg.assistant.get("usar_llm") else None
         self.assistente = Assistente(cfg, self.speaker, self.fatos, llm,
                                      acoes={"areia_rosto": self.foto_para_areia, "areia": self.areia})
-        self.ouvido = Ouvido(cfg.assistant, cfg.stt, self.speaker, self.assistente.ouviu)
+        # No modo "só foto" a voz só serve a quem está na frente da câmera: sem rosto há 1 min, o
+        # ouvido nem tenta entender (de madrugada o Whisper transcrevia ruído 170x por hora e
+        # "ouvia" comandos que ninguém disse).
+        so_foto = bool(cfg.assistant.get("so_foto", True))
+        self.ouvido = Ouvido(cfg.assistant, cfg.stt, self.speaker, self.assistente.ouviu,
+                             ativo=(lambda: time.time() - self.ultimo_rosto < 60) if so_foto else None)
         self.ouvido.start()
         if llm is not None:
             threading.Thread(target=llm.warmup, daemon=True, name="llm-warmup").start()
@@ -308,9 +331,7 @@ class Detector:
             if not pacotes:
                 return None
             # os tempos do .ts não começam em 0 (o mpegts soma ~1,4 s) e o -ss conta do início
-            inicio = min(t for t, _ in pacotes)
-            fim = max(t for t, _ in pacotes)
-            chave = max((t for t, k in pacotes if k), default=inicio)
+            inicio, fim, chave = partida_do_video(pacotes)
             r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-y", "-ss", f"{chave - inicio:.3f}", "-i", seg, "-an",
                                 "-vf", f"select=gte(t\\,{max(0.0, fim - chave - 0.15):.3f})",
                                 "-update", "1", "-f", "image2", "-c:v", "bmp", saida],
@@ -401,8 +422,7 @@ class Detector:
                     pass
             if not pacotes:
                 return []
-            inicio, fim = min(t for t, _ in pacotes), max(t for t, _ in pacotes)
-            chave = max((t for t, k in pacotes if k), default=inicio)
+            inicio, fim, chave = partida_do_video(pacotes)
             filtro = f"select=gte(t\\,{max(0.0, fim - chave - ultimos_s):.3f}),crop={w}:{h}:{x}:{y}"
             r = subprocess.run(["ffmpeg", "-nostdin", "-v", "quiet", "-ss", f"{chave - inicio:.3f}", "-i", seg,
                                 "-an", "-vf", filtro, "-f", "rawvideo", "-pix_fmt", "bgr24", "pipe:1"],
@@ -668,6 +688,8 @@ class Detector:
             process_pending(self.con, self.engine, self.data)
         if self.every("fundo", 20):
             self.cuida_do_fundo(now)
+        if self.every("go2rtc", 60):
+            self.vigia_go2rtc.confere(now, ocupado=self.speaker.playing)
         if self.every("capture", 2):
             self.poll_capture(now)
         if self.every("presence", 15):
@@ -743,6 +765,8 @@ class Detector:
         dc = self.cfg.detection
         faces = self.engine.detect(frame)
         self.last_faces = len(faces)
+        if faces:
+            self.ultimo_rosto = ts
         matched, expired = self.tracker.update(faces, ts)
         for t in expired:
             self.on_track_end(t)

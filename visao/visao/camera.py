@@ -194,6 +194,9 @@ class Recorder:
             cmd = ["ffmpeg", "-nostdin", "-loglevel", "error", "-rtsp_transport", "tcp",
                    *opcoes_rtsp_timeout(), "-i", self.url, "-map", "0:v:0", "-c", "copy",
                    "-f", "segment", "-segment_time", str(self.SEG), "-reset_timestamps", "1",
+                   # grava cada pacote na hora: sem isto o arquivo só crescia de 256 em 256 KB e o
+                   # "último quadro" tinha até 2 s de atraso (a foto do gesto saía de antes do "Sorria!")
+                   "-segment_format_options", "flush_packets=1",
                    "-strftime", "1", os.path.join(self.dir, "seg_%Y%m%d-%H%M%S.ts")]
             self.proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                          stderr=subprocess.PIPE)
@@ -284,6 +287,7 @@ class OnvifWatcher:
         backoff = 5
         while not self._halt.is_set():
             pp = None
+            conectou = 0.0
             try:
                 c = self.cam
                 cam = ONVIFCamera(c.host, c.onvif_port, c.user, c.password, _wsdl_dir())
@@ -307,6 +311,15 @@ class OnvifWatcher:
                     if backoff != 5 and time.time() - conectou > 60:
                         backoff = 5  # só volta ao intervalo curto depois de 1 min estável
             except Exception as e:
+                if conectou and time.time() - conectou > 300:
+                    # a Tapo encerra a conversa de eventos a cada ~12 min: é rotina, reconecta logo
+                    log.info("ONVIF: a câmera encerrou a conexão de eventos; reconectando")
+                    try:
+                        pp.Unsubscribe()
+                    except Exception:
+                        pass
+                    self._halt.wait(1)
+                    continue
                 self.state = f"erro: {type(e).__name__}"
                 log.warning("ONVIF: %s; reconectando em %ss", e, backoff)
                 try:

@@ -9,6 +9,8 @@ O detector só enfileira; a fala roda numa thread separada.
 import hashlib
 import json
 import logging
+import atexit
+import shutil
 import os
 import queue
 import random
@@ -129,10 +131,37 @@ class Speaker:
         self._audio = None
         self.playing, self.last_play_end = False, 0.0  # o ouvido fica surdo enquanto a câmera fala
         base = "/dev/shm" if os.path.isdir("/dev/shm") else None
-        self._tmp = tempfile.mkdtemp(prefix="visao-fala-", dir=base)
+        self._limpa_sobras(base or tempfile.gettempdir())
+        self._tmp = tempfile.mkdtemp(prefix=f"visao-fala-{os.getpid()}-", dir=base)
+        atexit.register(shutil.rmtree, self._tmp, True)
         self.last_connect_s = None
         if gcfg.enabled and not self.enabled:
             self.last_error = "saída 'camera' sem a senha da conta Tapo (greeting.tapo_cloud_password)"
+
+    @staticmethod
+    def _limpa_sobras(base):
+        """Apaga pastas visao-fala-* deixadas por processos deste usuário que já morreram (cada vez
+        que o serviço ou um teste parava à força sobrava uma em /dev/shm: eram 48 em 14/11/2026).
+        O nome leva o número do processo; as antigas, sem número, saem depois de um dia."""
+        try:
+            for nome in os.listdir(base):
+                d = os.path.join(base, nome)
+                if not nome.startswith("visao-fala-") or not os.path.isdir(d) or os.stat(d).st_uid != os.getuid():
+                    continue
+                pid = nome.split("-")[2] if nome.count("-") >= 3 else ""
+                if pid.isdigit():
+                    try:
+                        os.kill(int(pid), 0)
+                        continue  # o dono ainda está rodando
+                    except ProcessLookupError:
+                        pass
+                    except OSError:
+                        continue
+                elif time.time() - os.path.getmtime(d) < 86400:
+                    continue
+                shutil.rmtree(d, ignore_errors=True)
+        except OSError:
+            pass
 
     def start(self):
         if self.enabled:

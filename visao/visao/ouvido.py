@@ -41,8 +41,9 @@ FRAME_BYTES = SR * FRAME_MS // 1000 * 2
 
 
 class Ouvido:
-    def __init__(self, acfg, scfg, speaker, on_text):
+    def __init__(self, acfg, scfg, speaker, on_text, ativo=None):
         self.acfg, self.scfg, self.speaker, self.on_text = acfg, scfg, speaker, on_text
+        self.ativo = ativo  # função: False = ninguém por perto, não vale a pena escutar
         self.model = None
         self.state, self.last_error, self.last_text, self.heard = "parado", None, None, 0
         self._stop = threading.Event()
@@ -160,7 +161,7 @@ class Ouvido:
             frame = le_exato(proc.stdout, FRAME_BYTES)
             if frame is None:
                 raise RuntimeError("áudio da câmera encerrado")
-            if self._muted():
+            if self._muted() or (self.ativo is not None and not self.ativo()):
                 pre.clear()
                 recent.clear()
                 voiced, buf = False, []
