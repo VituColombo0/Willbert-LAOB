@@ -253,8 +253,18 @@ class Detector:
         url = str(self.cfg.assistant.get("areia_url") or "")
         if not url:
             return False
-        threading.Thread(target=self._foto_para_areia, args=(nome, url, track_id), daemon=True,
-                         name="foto-areia").start()
+        # uma foto por vez: gesto e voz quase juntos (ou o gesto repetido) não disparam duas
+        if time.time() - getattr(self, "_foto_em_curso", 0.0) < 45:
+            log.info("foto para a areia: já há uma sendo feita; pedido ignorado")
+            return True
+        self._foto_em_curso = time.time()
+
+        def faz():
+            try:
+                self._foto_para_areia(nome, url, track_id)
+            finally:
+                self._foto_em_curso = 0.0
+        threading.Thread(target=faz, daemon=True, name="foto-areia").start()
         return True
 
     def areia(self, caminho, dados=None):
@@ -859,7 +869,7 @@ class Detector:
             if new:
                 self.on_entry(new, t, frame, aligned, ts, s1, emb)
             self.maybe_greet(t.member_id, ts, t.first_ts)
-            self.maybe_auto_enrich(t.member_id, emb, aligned, q, s1, ts, boot)
+            self.maybe_auto_enrich(t.member_id, emb, aligned, q, s1, ts, boot, folga=s1 - s2)
             self.learn_hard(t, emb, ts)
             log.debug("track %d = %s (%.2f)", t.id, self.gallery.names.get(t.member_id), s1)
         elif side:
@@ -1217,7 +1227,7 @@ class Detector:
     def pode_aprender(self, member_id):
         return self.manual_samples(member_id) >= int(self.cfg.detection.get("min_manual", 3))
 
-    def maybe_auto_enrich(self, member_id, emb, aligned, q, score, ts, boot=False):
+    def maybe_auto_enrich(self, member_id, emb, aligned, q, score, ts, boot=False, folga=1.0):
         """Reconhecimento de alta certeza vira amostra nova do membro, mas espalhada no tempo
         (ver hora_de_aprender). Com a base cheia (enrich_until), troca em vez de parar."""
         dc = self.cfg.detection
@@ -1232,6 +1242,10 @@ class Detector:
             return
         if boot and not few:
             return  # consenso de leituras fracas só serve para quem ainda tem poucas amostras
+        if not boot and folga < float(dc.get("learn_margin", 0.10)):
+            # parecido demais também com outro membro: reconhecer tudo bem, mas guardar como
+            # amostra poderia ensinar o rosto de um no cadastro do outro (e o erro se repetiria)
+            return
         if sims.size and float(sims.max()) >= 0.80:
             return  # já existe uma amostra quase igual
         if not self.hora_de_aprender(member_id, sims.size, ts):

@@ -39,6 +39,7 @@ DEFAULTS = {
         "boot_margin": 0.08,       # ...e folga sobre o 2º mais parecido
         "quick_accept": 0.42,      # 1 leitura basta se passar disso com folga >= quick_margin
         "quick_margin": 0.15,
+        "learn_margin": 0.10,      # só aprende se ficou pelo menos isso à frente do 2º membro mais parecido
         "learn_min_px": 48,        # amostra aprendida sozinha: rosto com pelo menos N px
         "learn_sharp": 70.0,       # ...e nitidez mínima (evita guardar rosto borrado)
         "few_samples": 8,          # membro com menos amostras que isso aprende mais rápido sozinho

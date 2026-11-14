@@ -57,7 +57,7 @@ def make():
     d.recent_confirmed, d.low, d.recent_unknown, d.pending_unknown = deque(maxlen=60), deque(maxlen=80), deque(maxlen=50), []
     d.recent_uncertain = deque(maxlen=50)
     d.on_entry = lambda *a: None
-    d.maybe_auto_enrich = lambda *a: None
+    d.maybe_auto_enrich = lambda *a, **k: None
     d.learn_hard = lambda *a: None
     d.on_track_end = lambda t: None
     d.capture = None
@@ -155,6 +155,8 @@ Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0 + 10)
 check("fase inicial: no máximo 1 a cada 30 s", added == [2])
 Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.35, t0 + 60)
 check("certeza baixa (0,35) não vira amostra", added == [2])
+Detector.maybe_auto_enrich(d, 2, emb_of(2, 0.6), None, {"q": 0.9}, 0.6, t0 + 120, folga=0.05)
+check("parecido demais com outro membro (folga 0,05) não vira amostra", added == [2])
 
 # 9b) depois da fase inicial: até 50, poucas por dia, em momentos sorteados, 2 h de intervalo
 def aprendiz(n_amostras, n_auto=0, auto_ts=0.0):

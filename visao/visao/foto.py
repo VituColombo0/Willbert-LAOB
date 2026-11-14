@@ -15,6 +15,7 @@ Sai um PNG com transparência: o Projetor-LAOB usa esse alfa e não recorta de n
 """
 import logging
 import os
+import threading
 from collections import deque
 
 import cv2
@@ -172,9 +173,21 @@ def miolo_do_corpo(shape, rosto):
     return cv2.GaussianBlur(m, (0, 0), max(2.0, w * 0.04))
 
 
+_unet = {}                      # caminho do modelo -> rede já carregada
+_unet_trava = threading.Lock()  # uma foto por vez na rede (o OpenCV não deixa usar em paralelo)
+
+
 def mascara_unet(img, modelo):
-    """0..1 onde parece gente (U²-Net de pessoas, ~2-3 s na CPU do laob)."""
-    net = cv2.dnn.readNetFromONNX(modelo)
+    """0..1 onde parece gente (U²-Net de pessoas, ~2-3 s na CPU do laob). A rede (170 MB) fica
+    carregada depois da primeira foto: ler o arquivo de novo a cada foto custava ~1 s a mais."""
+    with _unet_trava:
+        net = _unet.get(modelo)
+        if net is None:
+            net = _unet[modelo] = cv2.dnn.readNetFromONNX(modelo)
+        return _mascara_unet(img, net)
+
+
+def _mascara_unet(img, net):
     rgb = cv2.cvtColor(cv2.resize(img, (320, 320), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2RGB)
     rgb = rgb.astype(np.float32) / max(float(rgb.max()), 1.0)
     rgb = (rgb - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
