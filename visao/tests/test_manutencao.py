@@ -120,4 +120,52 @@ Speaker._limpa_sobras(base)
 sobrou = sorted(os.listdir(base))
 check("limpa só as pastas de processos mortos e as antigas",
       sobrou == sorted(os.path.basename(d) for d in (viva, recente, outra)), f"{sobrou}")
+# --- volta de fotos: gira, fotografa e SEMPRE devolve a câmera
+from visao import panorama as P
+
+
+class PtzFalso:
+    def __init__(self, falha_em=None):
+        self.pos, self.idas, self.falha_em = (0.2, -0.1), [], falha_em
+
+    def posicao(self):
+        return self.pos
+
+    def vai(self, pan, tilt):
+        self.idas.append((pan, tilt))
+        if self.falha_em is not None and len(self.idas) == self.falha_em:
+            raise RuntimeError("câmera não respondeu")
+        self.pos = (max(-0.8, min(0.8, pan)), tilt)   # fim de curso em 0,8: não chega em 0,9
+
+
+pos = P.posicoes(6, 2, -0.1)
+check("posições: 6 giros x 2 inclinações, em zigue-zague", len(pos) == 12 and pos[0] == (-0.9, -0.1)
+      and pos[5] == (0.9, -0.1) and pos[6] == (0.9, -0.55) and pos[11] == (-0.9, -0.55), f"{pos[:2]}")
+rel = [0.0]
+d = tempfile.mkdtemp()
+pz = PtzFalso()
+fotos = P.volta(pz, lambda: b"jpg", d, 5, 1, dorme=lambda s: rel.__setitem__(0, rel[0] + s), agora=lambda: rel[0])
+check("volta: 5 fotos gravadas com a posição real (fim de curso)", len(fotos) == 5 and fotos[0]["pan"] == -0.8
+      and sorted(os.listdir(d)) == ["pan-00.jpg", "pan-01.jpg", "pan-02.jpg", "pan-03.jpg", "pan-04.jpg", "panorama.json"])
+check("volta: a câmera volta para onde estava", pz.pos == (0.2, -0.1) and pz.idas[-1] == (0.2, -0.1))
+pz2 = PtzFalso(falha_em=3)
+try:
+    P.volta(pz2, lambda: b"jpg", tempfile.mkdtemp(), 5, 1, dorme=lambda s: rel.__setitem__(0, rel[0] + s), agora=lambda: rel[0])
+    falhou = False
+except RuntimeError:
+    falhou = True
+check("volta que falha no meio: mesmo assim devolve a câmera", falhou and pz2.idas[-1] == (0.2, -0.1) and pz2.pos == (0.2, -0.1))
+n = [0]
+
+
+def quadro_ruim():
+    n[0] += 1
+    if n[0] == 2:
+        raise OSError("sem quadro")
+    return b"jpg"
+
+
+pz3 = PtzFalso()
+fotos3 = P.volta(pz3, quadro_ruim, tempfile.mkdtemp(), 4, 1, dorme=lambda s: rel.__setitem__(0, rel[0] + s), agora=lambda: rel[0])
+check("um quadro que falha não estraga a volta", len(fotos3) == 3 and pz3.pos == (0.2, -0.1))
 print("TUDO OK" if ok else "HÁ FALHAS")

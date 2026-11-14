@@ -1,7 +1,7 @@
 #!/bin/bash
 # Liga/desliga o Willbert no laob sem pedir senha (sudoers libera SÓ este arquivo).
 # Instalado como root em /usr/local/sbin/willbert-controle pelo otimizar.sh.
-#   sudo willbert-controle ligar | desligar | estado | testar-camera | importar | foto
+#   sudo willbert-controle ligar | desligar | estado | testar-camera | importar | foto | panorama
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 B=/opt/visao
@@ -71,6 +71,16 @@ PY
     [ $ok = 1 ] || { rm -f "$FOTO.tmp"; echo "não consegui a foto da câmera"; exit 1; }
     mv "$FOTO.tmp" "$FOTO"; chown laob:laob "$FOTO" "$(dirname "$FOTO")"
     echo "$FOTO" ;;
+  panorama)
+    # volta de fotos para montar a planta do laboratório: gira a câmera e ela volta para onde estava.
+    # Precisa do Willbert ligado (o quadro vem do go2rtc). As fotos ficam só nesta máquina.
+    [ "$(systemctl is-active visao-go2rtc || true)" = active ] || { echo "ligue o Willbert antes (willbert-controle ligar)"; exit 1; }
+    PASTA=/home/laob/willbert-panorama
+    rm -rf "$PASTA"; mkdir -p "$PASTA"
+    cod=0
+    VISAO_CONFIG=$B/config.toml visao-cli panorama --saida "$PASTA" || cod=$?
+    chown -R laob:laob "$PASTA"; chmod 700 "$PASTA"
+    exit $cod ;;
   *)
-    echo "uso: willbert-controle ligar|desligar|estado|testar-camera|importar|foto"; exit 2 ;;
+    echo "uso: willbert-controle ligar|desligar|estado|testar-camera|importar|foto|panorama"; exit 2 ;;
 esac

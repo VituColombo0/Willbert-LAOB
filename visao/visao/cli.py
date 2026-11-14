@@ -279,6 +279,28 @@ def cmd_testar_camera(a):
     return 0
 
 
+def cmd_panorama(a):
+    """Volta de fotos com a câmera (planta do laboratório); a câmera volta para onde estava."""
+    from . import panorama
+    from .camera import _wsdl_dir
+    try:
+        ptz = panorama.Ptz(cfg.camera, _wsdl_dir())
+        origem = ptz.posicao()
+    except Exception as e:
+        print(f"a câmera não respondeu ao comando de giro ({type(e).__name__}: {e})")
+        return 1
+    print(f"câmera em giro {origem[0]:+.2f}, inclinação {origem[1]:+.2f}; fazendo a volta de fotos...")
+    g = cfg.greeting
+    fotos = panorama.volta(ptz, lambda: panorama.quadro_go2rtc(g.get("go2rtc_url") or "http://127.0.0.1:1984",
+                                                               g.get("stream") or "camera"),
+                           a.saida, a.passos, a.inclinacoes)
+    fim = ptz.posicao()
+    voltou = abs(fim[0] - origem[0]) < 0.03 and abs(fim[1] - origem[1]) < 0.04
+    print(f"{len(fotos)} fotos em {a.saida}; câmera {'de volta à posição original' if voltou else 'NÃO voltou: está em'}"
+          + ("" if voltou else f" giro {fim[0]:+.2f}, inclinação {fim[1]:+.2f}"))
+    return 0 if fotos and voltou else 1
+
+
 def cmd_go2rtc_config(a):
     """Gera a configuração do go2rtc (stream da câmera com áudio de duas vias)."""
     from urllib.parse import quote
@@ -322,6 +344,11 @@ def main():
     sp.add_argument("--stdin", action="store_true")
     sp.add_argument("--usuario", help="nome de usuário do login (padrão: mantém o atual)")
     sp.set_defaults(fn=cmd_senha)
+    sp = sub.add_parser("panorama", help="volta de fotos com a câmera (ela volta para onde estava)")
+    sp.add_argument("--saida", required=True)
+    sp.add_argument("--passos", type=int, default=10)
+    sp.add_argument("--inclinacoes", type=int, default=2)
+    sp.set_defaults(fn=cmd_panorama)
     sp = sub.add_parser("go2rtc-config")
     sp.add_argument("--saida", default="/opt/visao/go2rtc.yaml")
     sp.set_defaults(fn=cmd_go2rtc_config)
