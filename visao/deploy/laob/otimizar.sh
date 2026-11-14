@@ -36,7 +36,9 @@ CPUWeight=40
 IOWeight=40
 UNIT
 cp /etc/systemd/system/visao-detector.service.d/prioridade.conf /etc/systemd/system/visao-web.service.d/prioridade.conf
-printf '[Service]\nNice=5\nCPUWeight=60\n' > /etc/systemd/system/visao-go2rtc.service.d/prioridade.conf
+# CPUQuota: o go2rtc usa ~1-6% de um núcleo; por um defeito dele (laço sem fim na leitura da Tapo)
+# já ficou 2 dias a 100%. O detector reinicia quando vê isso; o teto vale mesmo com ele desligado.
+printf '[Service]\nNice=5\nCPUWeight=60\nCPUQuota=40%%\n' > /etc/systemd/system/visao-go2rtc.service.d/prioridade.conf
 
 echo "[3/8] Ollama só na CPU e desligado (só se ainda estiver instalado; no laob saiu em 2026-11-13)"
 if systemctl cat ollama >/dev/null 2>&1; then

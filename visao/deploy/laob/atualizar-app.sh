@@ -23,5 +23,14 @@ fi
 install -o root -g root -m 755 "$R/deploy/laob/willbert-controle" /usr/local/sbin/willbert-controle
 for c in willbert willbert-janela; do install -o "$U" -g "$U" -m 755 "$R/deploy/laob/$c" "$UH/.local/bin/$c"; done
 # (a pasta "6 - Willbert" da Área de Trabalho saiu em 13/11: o Willbert é ligado pelo painel da areia)
+# 2026-11-14: teto de CPU para o go2rtc (ver otimizar.sh). Só onde o otimizar.sh já foi usado;
+# o desfazer.sh apaga este arquivo junto com o resto.
+P=/etc/systemd/system/visao-go2rtc.service.d/prioridade.conf
+if [ -f "$P" ] && ! grep -q '^CPUQuota=' "$P"; then
+  echo 'CPUQuota=40%' >> "$P"
+  systemctl daemon-reload
+  if systemctl is-active -q visao-go2rtc; then systemctl restart visao-go2rtc; sleep 3; fi
+  echo "go2rtc: teto de 40% de um núcleo aplicado"
+fi
 if systemctl is-active -q visao-detector; then systemctl restart visao-detector; fi
 echo INSTALADO-OK

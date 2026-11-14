@@ -117,6 +117,7 @@ class Speaker:
         self.camera_ok = self.output in ("camera", "auto") and bool(gcfg.tapo_cloud_password)
         self.local_ok = self.output in ("local", "auto")
         self.enabled = bool(gcfg.enabled and (self.camera_ok or self.local_ok))
+        self._camera_volta = 0.0   # quando tentar a câmera de novo depois de 3 falhas seguidas
         self.cache = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
         self.q = queue.Queue(maxsize=5)
@@ -573,6 +574,10 @@ class Speaker:
 
     def _play(self, path):
         path = self.louder(path)
+        if not self.camera_ok and self._camera_volta and time.time() >= self._camera_volta:
+            # passou a pausa depois das 3 falhas: tenta de novo (uma falha já desliga outra vez)
+            self.camera_ok, self._camera_volta, self.cam_fails = True, 0.0, 2
+            log.info("saída pela câmera: tentando de novo depois da pausa")
         if self.camera_ok:
             try:
                 self.play_camera(path)
@@ -583,9 +588,12 @@ class Speaker:
                 log.warning("câmera não tocou o áudio (%s: %s)", type(e).__name__, e)
                 if self.cam_fails >= 3:
                     # a Tapo bloqueia a conta depois de muitas falhas de login: para de tentar
+                    # ...mas não para sempre (antes ele ficava mudo até alguém reiniciar o serviço,
+                    # mesmo que a falha fosse só a rede ou o go2rtc reiniciando): volta em 30 min
                     self.camera_ok = False
-                    log.error("saída pela câmera desligada após 3 falhas seguidas "
-                              "(confira a conta Tapo e reinicie o visao-detector)")
+                    self._camera_volta = time.time() + 1800
+                    log.error("saída pela câmera em pausa por 30 min após 3 falhas seguidas "
+                              "(se continuar, confira a conta Tapo)")
                 if not self.local_ok:
                     raise
         if self.local_ok:
@@ -613,7 +621,7 @@ class Speaker:
             except Exception as e:
                 self.last_error = f"{type(e).__name__}: {e}"
                 log.warning("não foi possível falar '%s': %s", text, self.last_error)
-            if not (self.camera_ok or self.local_ok):
+            if not (self.camera_ok or self.local_ok or self._camera_volta):
                 self.enabled = False
             if temp:  # resposta de conversa: apaga o áudio e as versões derivadas
                 for f in os.listdir(self._tmp):
