@@ -44,13 +44,13 @@ Depois de uma foto, espere uns 20 segundos para fazer outra.
 (Para voltar a areia ao normal: "Voltar para a topografia" na pasta 1, ou: areia-topografia)
 
 As brincadeiras da areia (cores, tesouro, peixes, labirinto...) são pelos
-atalhos das pastas 1 a 8 ou pelo celular: http://100.114.194.28:8090
+atalhos das pastas 1 a 8 ou pelo celular: http://IP_TAILSCALE_DO_PC:8090
 
 
 SITE DO WILLBERT (cadastro de membros e histórico)
 --------------------------------------------------
   No laboratório: http://192.168.0.139:8080 (ou neste computador: http://localhost:8080)
-  De fora (com Tailscale): http://100.114.194.28:8080
+  De fora (com Tailscale): http://IP_TAILSCALE_DO_PC:8080
   Usuário e senha: com o Victor.
   Lá dá para cadastrar membros (com fotos ou pela câmera) e ver quem
   chegou e saiu em cada dia.
